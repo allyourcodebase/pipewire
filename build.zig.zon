@@ -1,0 +1,22 @@
+.{
+    .name = "pipewire",
+    .version = "1.1.82",
+
+    .minimum_zig_version = "0.13.0",
+
+    .dependencies = .{
+        .valgrind_h = .{
+            .url = "https://github.com/allyourcodebase/valgrind.h/archive/refs/tags/3.23.0.tar.gz",
+            .hash = "12207d68a1e77210037b9a27012baf12a01e4513bb022d684eecd6b1134ba886fe3a",
+        },
+        .upstream = .{
+            .url = "git+https://gitlab.freedesktop.org/pipewire/pipewire.git#1.1.82",
+            .hash = "122017159a4d5ee22e5109a27254f4074bec896355bfaa2170cf66667c72af884298",
+        },
+    },
+    .paths = .{
+        "LICENSE",
+        "build.zig",
+        "build.zig.zon",
+    },
+}
