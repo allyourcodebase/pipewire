@@ -11,8 +11,8 @@
             .hash = "12207d68a1e77210037b9a27012baf12a01e4513bb022d684eecd6b1134ba886fe3a",
         },
         .upstream = .{
-            .url = "git+https://gitlab.freedesktop.org/pipewire/pipewire.git#1.1.82",
-            .hash = "122017159a4d5ee22e5109a27254f4074bec896355bfaa2170cf66667c72af884298",
+            .url = "git+https://gitlab.freedesktop.org/pipewire/pipewire.git#1.5.81",
+            .hash = "N-V-__8AAKYw2AD301ZQsWszbYSWZQF5y-q4WXJif0UGRvFh",
         },
     },
     .paths = .{

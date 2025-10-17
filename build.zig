@@ -50,6 +50,7 @@ pub fn build(b: *std.Build) void {
             "thread.c",
             "utils.c",
             "work-queue.c",
+            "timer-queue.c",
         },
         .flags = &.{
             "-fvisibility=hidden",
