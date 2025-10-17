@@ -7,10 +7,12 @@ pub fn build(b: *std.Build) void {
     const valgrind_h_dep = b.dependency("valgrind_h", .{});
     const upstream = b.dependency("upstream", .{});
 
-    const libpipewire = b.addStaticLibrary(.{
+    const libpipewire = b.addLibrary(.{
         .name = "pipewire",
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     libpipewire.addCSourceFiles(.{
         .root = upstream.path("src/pipewire"),
@@ -124,8 +126,10 @@ pub fn build(b: *std.Build) void {
 
     const audio_src_exe = b.addExecutable(.{
         .name = "audio-src",
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     audio_src_exe.addCSourceFiles(.{
         .root = upstream.path("src/examples"),

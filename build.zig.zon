@@ -1,8 +1,9 @@
 .{
-    .name = "pipewire",
+    .name = .pipewire,
+    .fingerprint = 0x1c93541a4325abb4,
     .version = "1.1.82",
 
-    .minimum_zig_version = "0.13.0",
+    .minimum_zig_version = "0.15.1",
 
     .dependencies = .{
         .valgrind_h = .{
