@@ -1,18 +1,36 @@
 .{
     .name = .pipewire,
     .fingerprint = 0x1c93541a4325abb4,
-    .version = "1.1.82",
+    .version = "1.5.81",
+    .api_version = "0.3",
 
     .minimum_zig_version = "0.15.1",
 
     .dependencies = .{
         .valgrind_h = .{
             .url = "https://github.com/allyourcodebase/valgrind.h/archive/refs/tags/3.23.0.tar.gz",
-            .hash = "12207d68a1e77210037b9a27012baf12a01e4513bb022d684eecd6b1134ba886fe3a",
+            .hash = "N-V-__8AAMV2BgB9aKHnchADe5onASuvEqAeRRO7Ai1oTuzW",
         },
         .upstream = .{
             .url = "git+https://gitlab.freedesktop.org/pipewire/pipewire.git#1.5.81",
             .hash = "N-V-__8AAKYw2AD301ZQsWszbYSWZQF5y-q4WXJif0UGRvFh",
+        },
+        .dbus = .{
+            .version = "1.16.0",
+            .url = "https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-1.16.0/dbus-dbus-1.16.0.tar.gz",
+            .hash = "N-V-__8AAINjaQDkpaIvG4MTKbGNglOKX7IQJFsq8g7866ub",
+        },
+        .systemd = .{
+            .url = "https://github.com/systemd/systemd/archive/refs/tags/v258.1.tar.gz",
+            .hash = "N-V-__8AAF_uDQXJ8Lc6P0A53_HJGr6MeYHvEITfvDfvviAE",
+        },
+        .libevl = .{
+            .url = "https://gitlab.com/Xenomai/xenomai4/libevl/-/archive/r55/libevl-r55.tar.gz",
+            .hash = "N-V-__8AAIEwDwDnN-y7dfgp3dqgve-De-Y3MMqAmLNunKIJ",
+        },
+        .linux_evl = .{
+            .url = "https://gitlab.com/Xenomai/xenomai4/linux-evl/-/archive/v6.12.55-evl1-rebase/linux-evl-v6.12.55-evl1-rebase.tar.gz",
+            .hash = "N-V-__8AAN-PN1hRmJ0JvbkCwXwRGbvSapE4i1-5oISeFiqF",
         },
     },
     .paths = .{
