@@ -278,10 +278,48 @@ pub fn build(b: *std.Build) void {
             },
         });
     }
+
+    // Build the examples
+    {
+        const screen_play = b.addExecutable(.{
+            .name = "screen_play",
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+        screen_play.addCSourceFile(.{
+            .file = b.path("src/screen-play.c"),
+        });
+        b.installArtifact(screen_play);
+
+        screen_play.linkLibC();
+
+        const sdl = b.dependency("sdl", .{
+            .optimize = optimize,
+            .target = target,
+        });
+        screen_play.linkLibrary(sdl.artifact("SDL3"));
+
+        var dep: std.Build.Dependency = .{ .builder = b };
+        linkAndInstall(b, &dep, screen_play);
+
+        const run_step = b.step("screen-play", "Run the screen-play example");
+
+        const run_cmd = b.addRunArtifact(screen_play);
+        run_cmd.setCwd(.{ .cwd_relative = b.getInstallPath(.bin, "") });
+        run_step.dependOn(&run_cmd.step);
+
+        run_cmd.step.dependOn(b.getInstallStep());
+
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+    }
 }
 
 /// You may call this externally to link to libpipewire and install its dependencies alongside the
-/// binary.
+/// binary. Remember that you can import build scripts by module name in your build.zig files.
 pub fn linkAndInstall(
     b: *std.Build,
     dep: *std.Build.Dependency,

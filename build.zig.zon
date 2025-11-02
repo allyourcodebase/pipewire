@@ -15,22 +15,10 @@
             .url = "git+https://gitlab.freedesktop.org/pipewire/pipewire.git#1.5.81",
             .hash = "N-V-__8AAKYw2AD301ZQsWszbYSWZQF5y-q4WXJif0UGRvFh",
         },
-        .dbus = .{
-            .version = "1.16.0",
-            .url = "https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-1.16.0/dbus-dbus-1.16.0.tar.gz",
-            .hash = "N-V-__8AAINjaQDkpaIvG4MTKbGNglOKX7IQJFsq8g7866ub",
-        },
-        .systemd = .{
-            .url = "https://github.com/systemd/systemd/archive/refs/tags/v258.1.tar.gz",
-            .hash = "N-V-__8AAF_uDQXJ8Lc6P0A53_HJGr6MeYHvEITfvDfvviAE",
-        },
-        .libevl = .{
-            .url = "https://gitlab.com/Xenomai/xenomai4/libevl/-/archive/r55/libevl-r55.tar.gz",
-            .hash = "N-V-__8AAIEwDwDnN-y7dfgp3dqgve-De-Y3MMqAmLNunKIJ",
-        },
-        .linux_evl = .{
-            .url = "https://gitlab.com/Xenomai/xenomai4/linux-evl/-/archive/v6.12.55-evl1-rebase/linux-evl-v6.12.55-evl1-rebase.tar.gz",
-            .hash = "N-V-__8AAN-PN1hRmJ0JvbkCwXwRGbvSapE4i1-5oISeFiqF",
+        // Used by the examples
+        .sdl = .{
+            .url = "git+https://github.com/allyourcodebase/SDL3#af9c32ce4824e0ad4337447434c40f2b672faf94",
+            .hash = "sdl-0.0.0-i4QD0btgqAABajEXrQnyZr1xVsk7LM48w2nBmuQ5gdfr",
         },
     },
     .paths = .{
