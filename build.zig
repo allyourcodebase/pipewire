@@ -107,76 +107,67 @@ pub fn build(b: *std.Build) void {
     });
 
     // Build libpipewire
-    {
-        // Build the library
-        const libpipewire = b.addLibrary(.{
-            .name = "pipewire-0.3",
-            // Pipewire needs to be build as a dynamic library for its symbols to be available to the
-            // dynamic libraries it dlopens. Alternatively, you can link it statically, but you'll need
-            // to set rdynamic on the executable to make these symbols available.
-            .linkage = .static,
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-        libpipewire.addCSourceFiles(.{
-            .root = upstream.path("src/pipewire"),
-            .files = &.{
-                "buffers.c",
-                "conf.c",
-                "context.c",
-                "control.c",
-                "core.c",
-                "data-loop.c",
-                "filter.c",
-                "global.c",
-                "impl-client.c",
-                "impl-core.c",
-                "impl-device.c",
-                "impl-factory.c",
-                "impl-link.c",
-                "impl-metadata.c",
-                "impl-module.c",
-                "impl-node.c",
-                "impl-port.c",
-                "introspect.c",
-                "log.c",
-                "loop.c",
-                "main-loop.c",
-                "mem.c",
-                "pipewire.c",
-                "properties.c",
-                "protocol.c",
-                "proxy.c",
-                "resource.c",
-                "settings.c",
-                "stream.c",
-                "thread-loop.c",
-                "thread.c",
-                "timer-queue.c",
-                "utils.c",
-                "work-queue.c",
-            },
-            .flags = flags,
-        });
-        libpipewire.linkLibC();
+    const libpipewire = b.addLibrary(.{
+        .name = "pipewire-0.3",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    libpipewire.addCSourceFiles(.{
+        .root = upstream.path("src/pipewire"),
+        .files = &.{
+            "buffers.c",
+            "conf.c",
+            "context.c",
+            "control.c",
+            "core.c",
+            "data-loop.c",
+            "filter.c",
+            "global.c",
+            "impl-client.c",
+            "impl-core.c",
+            "impl-device.c",
+            "impl-factory.c",
+            "impl-link.c",
+            "impl-metadata.c",
+            "impl-module.c",
+            "impl-node.c",
+            "impl-port.c",
+            "introspect.c",
+            "log.c",
+            "loop.c",
+            "main-loop.c",
+            "mem.c",
+            "pipewire.c",
+            "properties.c",
+            "protocol.c",
+            "proxy.c",
+            "resource.c",
+            "settings.c",
+            "stream.c",
+            "thread-loop.c",
+            "thread.c",
+            "timer-queue.c",
+            "utils.c",
+            "work-queue.c",
+        },
+        .flags = flags,
+    });
+    libpipewire.linkLibC();
 
-        // Add include paths
-        libpipewire.addIncludePath(b.dependency("valgrind_h", .{}).path(""));
-        libpipewire.addIncludePath(upstream.path("spa/include"));
-        libpipewire.addIncludePath(upstream.path("src"));
-        libpipewire.addConfigHeader(version_h);
-        libpipewire.addConfigHeader(config_h);
+    libpipewire.addIncludePath(b.dependency("valgrind_h", .{}).path(""));
+    libpipewire.addIncludePath(upstream.path("spa/include"));
+    libpipewire.addIncludePath(upstream.path("src"));
+    libpipewire.addConfigHeader(version_h);
+    libpipewire.addConfigHeader(config_h);
 
-        // Install public headers
-        libpipewire.installHeadersDirectory(upstream.path("src/pipewire"), "pipewire", .{});
-        libpipewire.installHeadersDirectory(upstream.path("spa/include/spa"), "spa", .{});
-        libpipewire.installConfigHeader(version_h);
+    libpipewire.installHeadersDirectory(upstream.path("src/pipewire"), "pipewire", .{});
+    libpipewire.installHeadersDirectory(upstream.path("spa/include/spa"), "spa", .{});
+    libpipewire.installConfigHeader(version_h);
 
-        // Install the library
-        b.installArtifact(libpipewire);
-    }
+    b.installArtifact(libpipewire);
 
     // Build the plugins and modules
     {
