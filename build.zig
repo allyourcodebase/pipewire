@@ -27,11 +27,11 @@ pub fn build(b: *std.Build) void {
     });
 
     // Compile our dl stub
-    const dl = b.addLibrary(.{
-        .name = "dl",
+    const dlfcn = b.addLibrary(.{
+        .name = "dlfcn",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/dl.zig"),
+            .root_source_file = b.path("src/dlfcn.zig"),
             .target = target,
             .optimize = optimize,
         }),
@@ -126,7 +126,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    libpipewire.linkLibrary(dl);
+    libpipewire.linkLibrary(dlfcn);
     libpipewire.addCSourceFiles(.{
         .root = upstream.path("src/pipewire"),
         .files = &.{
