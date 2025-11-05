@@ -26,6 +26,17 @@ pub fn build(b: *std.Build) void {
         .install_subdir = "pipewire-0.3",
     });
 
+    // Compile our dl stub
+    const dl = b.addLibrary(.{
+        .name = "dl",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/dl.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
     // Build and install the configuration
     {
         const generate_conf = b.addExecutable(.{
@@ -109,12 +120,13 @@ pub fn build(b: *std.Build) void {
     // Build libpipewire
     const libpipewire = b.addLibrary(.{
         .name = "pipewire-0.3",
-        .linkage = .dynamic,
+        .linkage = .static,
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
         }),
     });
+    libpipewire.linkLibrary(dl);
     libpipewire.addCSourceFiles(.{
         .root = upstream.path("src/pipewire"),
         .files = &.{
@@ -168,9 +180,6 @@ pub fn build(b: *std.Build) void {
     libpipewire.installConfigHeader(version_h);
 
     b.installArtifact(libpipewire);
-
-    _ = install_dir.addCopyFile(libpipewire.getEmittedBin(), "libpipewire-0.3.so");
-    _ = install_dir.addCopyFile(libpipewire.getEmittedBin(), "libpipewire-0.3.so.0");
 
     // Build the plugins and modules
     {
@@ -365,7 +374,7 @@ pub const PipewireModule = struct {
     ) *std.Build.Step.Compile {
         const lib = b.addLibrary(.{
             .name = b.fmt("pipewire-module-{s}", .{self.name}),
-            .linkage = .dynamic,
+            .linkage = .static,
             .root_module = b.createModule(.{
                 .target = ctx.target,
                 .optimize = ctx.optimize,
@@ -382,13 +391,6 @@ pub const PipewireModule = struct {
         lib.addConfigHeader(ctx.config);
         lib.linkLibC();
 
-        _ = ctx.install_dir.addCopyFile(lib.getEmittedBin(), b.pathJoin(&.{
-            "modules",
-            b.fmt("libpipewire-module-{s}.so", .{self.name}),
-        }));
-
-        ctx.libpipewire.linkLibrary(lib);
-
         return lib;
     }
 };
@@ -404,7 +406,7 @@ pub const PipewirePlugin = struct {
     ) *std.Build.Step.Compile {
         const lib = b.addLibrary(.{
             .name = b.fmt("spa-{s}", .{self.name}),
-            .linkage = .dynamic,
+            .linkage = .static,
             .root_module = b.createModule(.{
                 .target = ctx.target,
                 .optimize = ctx.optimize,
@@ -422,14 +424,6 @@ pub const PipewirePlugin = struct {
         lib.addIncludePath(ctx.upstream.path("spa/include"));
         lib.addConfigHeader(ctx.config);
         lib.linkLibC();
-
-        _ = ctx.install_dir.addCopyFile(lib.getEmittedBin(), b.pathJoin(&.{
-            "plugins",
-            self.name,
-            b.fmt("libspa-{s}.so", .{self.name}),
-        }));
-
-        ctx.libpipewire.linkLibrary(lib);
 
         return lib;
     }
