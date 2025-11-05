@@ -109,7 +109,7 @@ pub fn build(b: *std.Build) void {
     // Build libpipewire
     const libpipewire = b.addLibrary(.{
         .name = "pipewire-0.3",
-        .linkage = .static,
+        .linkage = .dynamic,
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
@@ -169,6 +169,9 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(libpipewire);
 
+    _ = install_dir.addCopyFile(libpipewire.getEmittedBin(), "libpipewire-0.3.so");
+    _ = install_dir.addCopyFile(libpipewire.getEmittedBin(), "libpipewire-0.3.so.0");
+
     // Build the plugins and modules
     {
         const pm_ctx: PluginAndModuleCtx = .{
@@ -178,6 +181,7 @@ pub fn build(b: *std.Build) void {
             .version = version_h,
             .config = config_h,
             .install_dir = install_dir,
+            .libpipewire = libpipewire,
         };
 
         // Build and install the plugins
@@ -319,9 +323,6 @@ pub fn linkAndInstall(
     // Statically link libpipewire
     exe.linkLibrary(dep.artifact("pipewire-0.3"));
 
-    // Necessary for SPA to load symbols from the statically linked libpipewire
-    exe.rdynamic = true;
-
     // Note that the cache rpath will still be present: https://github.com/ziglang/zig/issues/24349
     exe.root_module.addRPathSpecial("$ORIGIN/pipewire-0.3");
 
@@ -350,6 +351,7 @@ pub const PluginAndModuleCtx = struct {
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     install_dir: *std.Build.Step.WriteFile,
+    libpipewire: *std.Build.Step.Compile,
 };
 
 pub const PipewireModule = struct {
@@ -384,6 +386,8 @@ pub const PipewireModule = struct {
             "modules",
             b.fmt("libpipewire-module-{s}.so", .{self.name}),
         }));
+
+        ctx.libpipewire.linkLibrary(lib);
 
         return lib;
     }
@@ -424,6 +428,8 @@ pub const PipewirePlugin = struct {
             self.name,
             b.fmt("libspa-{s}.so", .{self.name}),
         }));
+
+        ctx.libpipewire.linkLibrary(lib);
 
         return lib;
     }
