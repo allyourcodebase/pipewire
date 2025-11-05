@@ -191,6 +191,7 @@ pub fn build(b: *std.Build) void {
             .config = config_h,
             .install_dir = install_dir,
             .libpipewire = libpipewire,
+            .dlfcn = dlfcn,
         };
 
         // Build and install the plugins
@@ -361,6 +362,7 @@ pub const PluginAndModuleCtx = struct {
     optimize: std.builtin.OptimizeMode,
     install_dir: *std.Build.Step.WriteFile,
     libpipewire: *std.Build.Step.Compile,
+    dlfcn: *std.Build.Step.Compile,
 };
 
 pub const PipewireModule = struct {
@@ -390,6 +392,9 @@ pub const PipewireModule = struct {
         lib.addConfigHeader(ctx.version);
         lib.addConfigHeader(ctx.config);
         lib.linkLibC();
+
+        ctx.dlfcn.linkLibrary(lib);
+        ctx.dlfcn.addIncludePath(ctx.upstream.path("spa/include"));
 
         return lib;
     }
@@ -424,6 +429,9 @@ pub const PipewirePlugin = struct {
         lib.addIncludePath(ctx.upstream.path("spa/include"));
         lib.addConfigHeader(ctx.config);
         lib.linkLibC();
+
+        ctx.dlfcn.linkLibrary(lib);
+        ctx.dlfcn.addIncludePath(ctx.upstream.path("spa/include"));
 
         return lib;
     }

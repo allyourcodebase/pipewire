@@ -3,21 +3,20 @@ const std = @import("std");
 const log = std.log.scoped(.dl);
 const assert = std.debug.assert;
 
-pub const Lib = struct {
-    name: []const u8,
-    symbols: std.StaticStringMap(*anyopaque),
+const support = struct {
+    pub const c = @cImport({
+        @cInclude("spa/support/plugin.h");
+        @cInclude("spa/support/log.h");
+    });
 
-    pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        try writer.print("@\"{f}\"", .{std.zig.fmtString(self.name)});
-    }
+    extern const spa_log_topic_enum: c.spa_log_topic_enum;
 };
 
-const main_program = "@SELF";
 const libs: std.StaticStringMap(Lib) = .initComptime(.{
     .{
-        main_program,
+        Lib.main_program_name,
         Lib{
-            .name = main_program,
+            .name = Lib.main_program_name,
             .symbols = .initComptime(.{}),
         },
     },
@@ -26,19 +25,17 @@ const libs: std.StaticStringMap(Lib) = .initComptime(.{
         Lib{
             .name = "spa-support",
             .symbols = .initComptime(.{
-                // Implement!
-                // .{ "spa_handle_factory_enum", null },
+                .{ "spa_handle_factory_enum", Lib.sym(&support.c.spa_handle_factory_enum) },
+                .{ "spa_log_topic_enum", Lib.sym(&support.spa_log_topic_enum) },
             }),
         },
     },
 });
 
-export fn dlopen(path: ?[*:0]const c_char, flags: Flags) callconv(.c) ?*anyopaque {
-    comptime assert(@sizeOf(c_char) == @sizeOf(u8));
-    const path_u8: [*:0]const u8 = if (path) |p| @ptrCast(p) else main_program;
-    const span = std.mem.span(path_u8);
+export fn dlopen(path: ?[*:0]const u8, mode: std.c.RTLD) callconv(.c) ?*anyopaque {
+    const span = if (path) |p| std.mem.span(p) else Lib.main_program_name;
     const lib = if (libs.getIndex(span)) |index| &libs.kvs.values[index] else null;
-    log.info("dlopen(\"{f}\", {f}) -> {?f}", .{ std.zig.fmtString(span), flags, lib });
+    log.info("dlopen(\"{f}\", {f}) -> {?f}", .{ std.zig.fmtString(span), FmtMode.init(mode), lib });
     return @ptrCast(@constCast(lib));
 }
 
@@ -48,20 +45,29 @@ export fn dlclose(handle: ?*anyopaque) callconv(.c) c_int {
     return 0;
 }
 
-export fn dlsym(noalias handle: ?*anyopaque, noalias name_c: ?[*:0]c_char) ?*anyopaque {
+export fn dlsym(noalias handle: ?*anyopaque, noalias name: [*:0]u8) ?*anyopaque {
     const lib: *const Lib = @ptrCast(@alignCast(handle.?));
-    const name = std.mem.span(@as([*:0]u8, @ptrCast(name_c.?)));
-    const symbol = lib.symbols.get(name) orelse null;
-    log.info("dlsym({f}, \"{f}\") -> 0x{x}", .{
+    const span = std.mem.span(name);
+    var msg: ?[:0]const u8 = null;
+    const symbol = lib.symbols.get(span) orelse b: {
+        msg = "symbol not found";
+        break :b null;
+    };
+    log.info("dlsym({f}, \"{f}\") -> 0x{x} ({s})", .{
         lib,
-        std.zig.fmtString(name),
+        std.zig.fmtString(span),
         @intFromPtr(symbol),
+        if (msg) |m| m else "success",
     });
+    if (msg) |m| err = m;
     return symbol;
 }
 
+var err: ?[*:0]const u8 = null;
 export fn dlerror() ?[*:0]const u8 {
-    return null;
+    const result = err;
+    err = null;
+    return result;
 }
 
 export fn dlinfo(noalias handle: ?*anyopaque, request: c_int, noalias info: ?*anyopaque) c_int {
@@ -70,21 +76,33 @@ export fn dlinfo(noalias handle: ?*anyopaque, request: c_int, noalias info: ?*an
     @panic("unimplemented");
 }
 
-const Flags = packed struct(c_int) {
-    lazy: bool,
-    now: bool,
-    noload: bool,
-    _pad0: u5 = 0,
-    global: bool,
-    _pad1: u3 = 0,
-    nodelete: bool,
-    _pad2: std.meta.Int(.unsigned, @bitSizeOf(c_int) - 13) = 0,
+pub const Lib = struct {
+    const main_program_name = "@SELF";
+
+    name: []const u8,
+    symbols: std.StaticStringMap(*anyopaque),
 
     pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        try writer.print("@\"{f}\"", .{std.zig.fmtString(self.name)});
+    }
+
+    pub fn sym(val: anytype) *anyopaque {
+        return @ptrCast(@constCast(val));
+    }
+};
+
+pub const FmtMode = struct {
+    val: std.c.RTLD,
+
+    pub fn init(val: std.c.RTLD) @This() {
+        return .{ .val = val };
+    }
+
+    pub fn format(self: anytype, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try writer.writeAll(".{");
         var first = true;
-        inline for (@typeInfo(@This()).@"struct".fields) |field| {
-            const val = @field(self, field.name);
+        inline for (@typeInfo(@TypeOf(self.val)).@"struct".fields) |field| {
+            const val = @field(self.val, field.name);
             switch (@typeInfo(field.type)) {
                 .bool => if (val) {
                     if (!first) {
