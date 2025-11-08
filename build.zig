@@ -333,9 +333,6 @@ pub fn linkAndInstall(
     // Statically link libpipewire
     exe.linkLibrary(dep.artifact("pipewire-0.3"));
 
-    // Note that the cache rpath will still be present: https://github.com/ziglang/zig/issues/24349
-    exe.root_module.addRPathSpecial("$ORIGIN/pipewire-0.3");
-
     // Install Pipewire's dependencies
     b.installDirectory(.{
         .install_dir = .bin,
@@ -393,6 +390,9 @@ pub const PipewireModule = struct {
         lib.addConfigHeader(ctx.config);
         lib.linkLibC();
 
+        namespace(lib, "pipewire__module_init");
+        namespace(lib, "mod_topic");
+
         ctx.dlfcn.linkLibrary(lib);
         ctx.dlfcn.addIncludePath(ctx.upstream.path("spa/include"));
 
@@ -430,9 +430,43 @@ pub const PipewirePlugin = struct {
         lib.addConfigHeader(ctx.config);
         lib.linkLibC();
 
+        namespace(lib, "spa_handle_factory_enum");
+        namespace(lib, "spa_log_topic_enum");
+
         ctx.dlfcn.linkLibrary(lib);
         ctx.dlfcn.addIncludePath(ctx.upstream.path("spa/include"));
 
         return lib;
+    }
+};
+
+pub fn namespace(library: *std.Build.Step.Compile, symbol: []const u8) void {
+    const b = library.root_module.owner;
+    library.root_module.addCMacro(
+        symbol,
+        b.fmt("{f}", .{Namespaced.init(library.name, symbol)}),
+    );
+}
+
+pub const Namespaced = struct {
+    prefix: []const u8,
+    symbol: []const u8,
+
+    pub fn init(prefix: []const u8, symbol: []const u8) Namespaced {
+        return .{
+            .prefix = prefix,
+            .symbol = symbol,
+        };
+    }
+
+    pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        for (self.prefix) |c| {
+            switch (c) {
+                '-' => try writer.writeByte('_'),
+                else => try writer.writeByte(c),
+            }
+        }
+        try writer.writeAll("__");
+        try writer.writeAll(self.symbol);
     }
 };

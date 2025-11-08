@@ -3,13 +3,30 @@ const std = @import("std");
 const log = std.log.scoped(.dl);
 const assert = std.debug.assert;
 
-const support = struct {
-    pub const c = @cImport({
-        @cInclude("spa/support/plugin.h");
-        @cInclude("spa/support/log.h");
-    });
+pub const c = @cImport({
+    @cInclude("spa/support/plugin.h");
+    @cInclude("spa/support/log.h");
+});
 
-    extern const spa_log_topic_enum: c.spa_log_topic_enum;
+const plugins = struct {
+    const SpaHandleFactoryEnum = @TypeOf(c.spa_handle_factory_enum);
+
+    pub extern const spa_support__spa_handle_factory_enum: SpaHandleFactoryEnum;
+    pub extern const spa_videoconvert__spa_handle_factory_enum: SpaHandleFactoryEnum;
+
+    pub extern const spa_support__spa_log_topic_enum: c.spa_log_topic_enum;
+    pub extern const spa_videoconvert__spa_log_topic_enum: c.spa_log_topic_enum;
+};
+
+const modules = struct {
+    const PipewireModuleInit = fn (_: *anyopaque, _: *anyopaque) callconv(.c) void;
+
+    pub extern const pipewire_module_protocol_native__pipewire__module_init: PipewireModuleInit;
+    pub extern const pipewire_module_client_node__pipewire__module_init: PipewireModuleInit;
+    pub extern const pipewire_module_client_device__pipewire__module_init: PipewireModuleInit;
+    pub extern const pipewire_module_adapter__pipewire__module_init: PipewireModuleInit;
+    pub extern const pipewire_module_metadata__pipewire__module_init: PipewireModuleInit;
+    pub extern const pipewire_module_session_manager__pipewire__module_init: PipewireModuleInit;
 };
 
 const libs: std.StaticStringMap(Lib) = .initComptime(.{
@@ -25,8 +42,102 @@ const libs: std.StaticStringMap(Lib) = .initComptime(.{
         Lib{
             .name = "spa-support",
             .symbols = .initComptime(.{
-                .{ "spa_handle_factory_enum", Lib.sym(&support.c.spa_handle_factory_enum) },
-                .{ "spa_log_topic_enum", Lib.sym(&support.spa_log_topic_enum) },
+                .{
+                    "spa_handle_factory_enum",
+                    Lib.sym(&plugins.spa_support__spa_handle_factory_enum),
+                },
+                .{
+                    "spa_log_topic_enum",
+                    Lib.sym(&plugins.spa_support__spa_log_topic_enum),
+                },
+            }),
+        },
+    },
+    .{
+        "pipewire-0.3/plugins/videoconvert/libspa-videoconvert.so",
+        Lib{
+            .name = "libspa-videoconvert",
+            .symbols = .initComptime(.{
+                .{
+                    "spa_handle_factory_enum",
+                    Lib.sym(&plugins.spa_videoconvert__spa_handle_factory_enum),
+                },
+                .{
+                    "spa_log_topic_enum",
+                    Lib.sym(&plugins.spa_videoconvert__spa_log_topic_enum),
+                },
+            }),
+        },
+    },
+    .{
+        "pipewire-0.3/modules/libpipewire-module-protocol-native.so",
+        Lib{
+            .name = "libpipewire-module-protocol-native",
+            .symbols = .initComptime(.{
+                .{
+                    "pipewire__module_init",
+                    Lib.sym(&modules.pipewire_module_protocol_native__pipewire__module_init),
+                },
+            }),
+        },
+    },
+    .{
+        "pipewire-0.3/modules/libpipewire-module-client-node.so",
+        Lib{
+            .name = "libpipewire-module-client-node",
+            .symbols = .initComptime(.{
+                .{
+                    "pipewire__module_init",
+                    Lib.sym(&modules.pipewire_module_client_node__pipewire__module_init),
+                },
+            }),
+        },
+    },
+    .{
+        "pipewire-0.3/modules/libpipewire-module-client-device.so",
+        Lib{
+            .name = "libpipewire-module-client-device",
+            .symbols = .initComptime(.{
+                .{
+                    "pipewire__module_init",
+                    Lib.sym(&modules.pipewire_module_client_device__pipewire__module_init),
+                },
+            }),
+        },
+    },
+    .{
+        "pipewire-0.3/modules/libpipewire-module-adapter.so",
+        Lib{
+            .name = "libpipewire-module-adapter",
+            .symbols = .initComptime(.{
+                .{
+                    "pipewire__module_init",
+                    Lib.sym(&modules.pipewire_module_adapter__pipewire__module_init),
+                },
+            }),
+        },
+    },
+    .{
+        "pipewire-0.3/modules/libpipewire-module-metadata.so",
+        Lib{
+            .name = "libpipewire-module-metadata",
+            .symbols = .initComptime(.{
+                .{
+                    "pipewire__module_init",
+                    Lib.sym(&modules.pipewire_module_metadata__pipewire__module_init),
+                },
+            }),
+        },
+    },
+    .{
+        "pipewire-0.3/modules/libpipewire-module-session-manager.so",
+        Lib{
+            .name = "libpipewire-module-session-manager",
+            .symbols = .initComptime(.{
+                .{
+                    "pipewire__module_init",
+                    Lib.sym(&modules.pipewire_module_session_manager__pipewire__module_init),
+                },
             }),
         },
     },
@@ -71,7 +182,7 @@ export fn dlerror() ?[*:0]const u8 {
 }
 
 export fn dlinfo(noalias handle: ?*anyopaque, request: c_int, noalias info: ?*anyopaque) c_int {
-    const lib: *const Lib = @ptrCast(@alignCast(handle.?)); // XXX: null allowed?
+    const lib: *const Lib = @ptrCast(@alignCast(handle.?));
     log.info("dlinfo({f}, {}, {x})", .{ lib, request, @intFromPtr(info) });
     @panic("unimplemented");
 }
