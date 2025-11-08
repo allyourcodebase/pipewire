@@ -6,6 +6,7 @@ const assert = std.debug.assert;
 pub const c = @cImport({
     @cInclude("spa/support/plugin.h");
     @cInclude("spa/support/log.h");
+    @cInclude("dlfcn.h");
 });
 
 const plugins = struct {
@@ -29,12 +30,89 @@ const modules = struct {
     pub extern const pipewire_module_session_manager__pipewire__module_init: PipewireModuleInit;
 };
 
+const fops = struct {
+    pub fn OPENAT64(
+        dirfd: c_int,
+        path: [*:0]const u8,
+        oflag: c_int,
+        mode: std.c.mode_t,
+    ) callconv(.c) c_int {
+        return @intCast(std.os.linux.openat(dirfd, path, @bitCast(oflag), mode));
+    }
+
+    pub fn dup(oldfd: c_int) callconv(.c) c_int {
+        return @intCast(std.os.linux.dup(oldfd));
+    }
+
+    pub fn close(fd: c_int) callconv(.c) c_int {
+        return @intCast(std.os.linux.close(fd));
+    }
+
+    pub fn ioctl(fd: c_int, request: c_ulong, arg: *anyopaque) callconv(.c) c_int {
+        return @intCast(std.os.linux.ioctl(fd, @intCast(request), @intFromPtr(arg)));
+    }
+
+    pub fn mmap64(
+        addr: ?[*]u8,
+        length: usize,
+        prot: c_int,
+        flags: c_int,
+        fd: c_int,
+        offset: i64,
+    ) callconv(.c) *anyopaque {
+        return @ptrFromInt(std.os.linux.mmap(
+            addr,
+            length,
+            @intCast(prot),
+            @bitCast(flags),
+            fd,
+            offset,
+        ));
+    }
+
+    pub fn munmap(addr: [*]const u8, length: usize) callconv(.c) c_int {
+        return @intCast(std.os.linux.munmap(addr, length));
+    }
+};
+
 const libs: std.StaticStringMap(Lib) = .initComptime(.{
     .{
         Lib.main_program_name,
         Lib{
             .name = Lib.main_program_name,
             .symbols = .initComptime(.{}),
+        },
+    },
+    .{
+        Lib.rtld_next_name,
+        Lib{
+            .name = Lib.rtld_next_name,
+            .symbols = .initComptime(.{
+                .{
+                    "OPENAT64",
+                    Lib.sym(&fops.OPENAT64),
+                },
+                .{
+                    "dup",
+                    Lib.sym(&fops.dup),
+                },
+                .{
+                    "close",
+                    Lib.sym(&fops.close),
+                },
+                .{
+                    "ioctl",
+                    Lib.sym(&fops.ioctl),
+                },
+                .{
+                    "mmap64",
+                    Lib.sym(&fops.mmap64),
+                },
+                .{
+                    "munmap",
+                    Lib.sym(&fops.munmap),
+                },
+            }),
         },
     },
     .{
@@ -160,9 +238,15 @@ export fn dlsym(noalias handle: ?*anyopaque, noalias name: [*:0]u8) ?*anyopaque 
     const lib: *const Lib = @ptrCast(@alignCast(handle.?));
     const span = std.mem.span(name);
     var msg: ?[:0]const u8 = null;
-    const symbol = lib.symbols.get(span) orelse b: {
-        msg = "symbol not found";
-        break :b null;
+    const symbol = b: {
+        if (handle == c.RTLD_NEXT) {
+            break :b lib.symbols.get(Lib.rtld_next_name).?;
+        }
+        const symbol = lib.symbols.get(span) orelse {
+            msg = "symbol not found";
+            break :b null;
+        };
+        break :b symbol;
     };
     log.info("dlsym({f}, \"{f}\") -> 0x{x} ({s})", .{
         lib,
@@ -189,6 +273,7 @@ export fn dlinfo(noalias handle: ?*anyopaque, request: c_int, noalias info: ?*an
 
 pub const Lib = struct {
     const main_program_name = "@SELF";
+    const rtld_next_name = "@RTLD_NEXT";
 
     name: []const u8,
     symbols: std.StaticStringMap(*anyopaque),
