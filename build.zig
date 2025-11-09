@@ -26,6 +26,17 @@ pub fn build(b: *std.Build) void {
         .install_subdir = "pipewire-0.3",
     });
 
+    // Compile our dl stub
+    const dlfcn = b.addLibrary(.{
+        .name = "dlfcn",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/dlfcn.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
     // Build and install the configuration
     {
         const generate_conf = b.addExecutable(.{
@@ -107,76 +118,68 @@ pub fn build(b: *std.Build) void {
     });
 
     // Build libpipewire
-    {
-        // Build the library
-        const libpipewire = b.addLibrary(.{
-            .name = "pipewire-0.3",
-            // Pipewire needs to be build as a dynamic library for its symbols to be available to the
-            // dynamic libraries it dlopens. Alternatively, you can link it statically, but you'll need
-            // to set rdynamic on the executable to make these symbols available.
-            .linkage = .static,
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-        libpipewire.addCSourceFiles(.{
-            .root = upstream.path("src/pipewire"),
-            .files = &.{
-                "buffers.c",
-                "conf.c",
-                "context.c",
-                "control.c",
-                "core.c",
-                "data-loop.c",
-                "filter.c",
-                "global.c",
-                "impl-client.c",
-                "impl-core.c",
-                "impl-device.c",
-                "impl-factory.c",
-                "impl-link.c",
-                "impl-metadata.c",
-                "impl-module.c",
-                "impl-node.c",
-                "impl-port.c",
-                "introspect.c",
-                "log.c",
-                "loop.c",
-                "main-loop.c",
-                "mem.c",
-                "pipewire.c",
-                "properties.c",
-                "protocol.c",
-                "proxy.c",
-                "resource.c",
-                "settings.c",
-                "stream.c",
-                "thread-loop.c",
-                "thread.c",
-                "timer-queue.c",
-                "utils.c",
-                "work-queue.c",
-            },
-            .flags = flags,
-        });
-        libpipewire.linkLibC();
+    const libpipewire = b.addLibrary(.{
+        .name = "pipewire-0.3",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    libpipewire.linkLibrary(dlfcn);
+    libpipewire.addCSourceFiles(.{
+        .root = upstream.path("src/pipewire"),
+        .files = &.{
+            "buffers.c",
+            "conf.c",
+            "context.c",
+            "control.c",
+            "core.c",
+            "data-loop.c",
+            "filter.c",
+            "global.c",
+            "impl-client.c",
+            "impl-core.c",
+            "impl-device.c",
+            "impl-factory.c",
+            "impl-link.c",
+            "impl-metadata.c",
+            "impl-module.c",
+            "impl-node.c",
+            "impl-port.c",
+            "introspect.c",
+            "log.c",
+            "loop.c",
+            "main-loop.c",
+            "mem.c",
+            "pipewire.c",
+            "properties.c",
+            "protocol.c",
+            "proxy.c",
+            "resource.c",
+            "settings.c",
+            "stream.c",
+            "thread-loop.c",
+            "thread.c",
+            "timer-queue.c",
+            "utils.c",
+            "work-queue.c",
+        },
+        .flags = flags,
+    });
+    libpipewire.linkLibC();
 
-        // Add include paths
-        libpipewire.addIncludePath(b.dependency("valgrind_h", .{}).path(""));
-        libpipewire.addIncludePath(upstream.path("spa/include"));
-        libpipewire.addIncludePath(upstream.path("src"));
-        libpipewire.addConfigHeader(version_h);
-        libpipewire.addConfigHeader(config_h);
+    libpipewire.addIncludePath(b.dependency("valgrind_h", .{}).path(""));
+    libpipewire.addIncludePath(upstream.path("spa/include"));
+    libpipewire.addIncludePath(upstream.path("src"));
+    libpipewire.addConfigHeader(version_h);
+    libpipewire.addConfigHeader(config_h);
 
-        // Install public headers
-        libpipewire.installHeadersDirectory(upstream.path("src/pipewire"), "pipewire", .{});
-        libpipewire.installHeadersDirectory(upstream.path("spa/include/spa"), "spa", .{});
-        libpipewire.installConfigHeader(version_h);
+    libpipewire.installHeadersDirectory(upstream.path("src/pipewire"), "pipewire", .{});
+    libpipewire.installHeadersDirectory(upstream.path("spa/include/spa"), "spa", .{});
+    libpipewire.installConfigHeader(version_h);
 
-        // Install the library
-        b.installArtifact(libpipewire);
-    }
+    b.installArtifact(libpipewire);
 
     // Build the plugins and modules
     {
@@ -187,6 +190,8 @@ pub fn build(b: *std.Build) void {
             .version = version_h,
             .config = config_h,
             .install_dir = install_dir,
+            .libpipewire = libpipewire,
+            .dlfcn = dlfcn,
         };
 
         // Build and install the plugins
@@ -328,12 +333,6 @@ pub fn linkAndInstall(
     // Statically link libpipewire
     exe.linkLibrary(dep.artifact("pipewire-0.3"));
 
-    // Necessary for SPA to load symbols from the statically linked libpipewire
-    exe.rdynamic = true;
-
-    // Note that the cache rpath will still be present: https://github.com/ziglang/zig/issues/24349
-    exe.root_module.addRPathSpecial("$ORIGIN/pipewire-0.3");
-
     // Install Pipewire's dependencies
     b.installDirectory(.{
         .install_dir = .bin,
@@ -359,6 +358,8 @@ pub const PluginAndModuleCtx = struct {
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     install_dir: *std.Build.Step.WriteFile,
+    libpipewire: *std.Build.Step.Compile,
+    dlfcn: *std.Build.Step.Compile,
 };
 
 pub const PipewireModule = struct {
@@ -372,7 +373,7 @@ pub const PipewireModule = struct {
     ) *std.Build.Step.Compile {
         const lib = b.addLibrary(.{
             .name = b.fmt("pipewire-module-{s}", .{self.name}),
-            .linkage = .dynamic,
+            .linkage = .static,
             .root_module = b.createModule(.{
                 .target = ctx.target,
                 .optimize = ctx.optimize,
@@ -389,10 +390,11 @@ pub const PipewireModule = struct {
         lib.addConfigHeader(ctx.config);
         lib.linkLibC();
 
-        _ = ctx.install_dir.addCopyFile(lib.getEmittedBin(), b.pathJoin(&.{
-            "modules",
-            b.fmt("libpipewire-module-{s}.so", .{self.name}),
-        }));
+        namespace(lib, "pipewire__module_init");
+        namespace(lib, "mod_topic");
+
+        ctx.dlfcn.linkLibrary(lib);
+        ctx.dlfcn.addIncludePath(ctx.upstream.path("spa/include"));
 
         return lib;
     }
@@ -409,7 +411,7 @@ pub const PipewirePlugin = struct {
     ) *std.Build.Step.Compile {
         const lib = b.addLibrary(.{
             .name = b.fmt("spa-{s}", .{self.name}),
-            .linkage = .dynamic,
+            .linkage = .static,
             .root_module = b.createModule(.{
                 .target = ctx.target,
                 .optimize = ctx.optimize,
@@ -428,12 +430,43 @@ pub const PipewirePlugin = struct {
         lib.addConfigHeader(ctx.config);
         lib.linkLibC();
 
-        _ = ctx.install_dir.addCopyFile(lib.getEmittedBin(), b.pathJoin(&.{
-            "plugins",
-            self.name,
-            b.fmt("libspa-{s}.so", .{self.name}),
-        }));
+        namespace(lib, "spa_handle_factory_enum");
+        namespace(lib, "spa_log_topic_enum");
+
+        ctx.dlfcn.linkLibrary(lib);
+        ctx.dlfcn.addIncludePath(ctx.upstream.path("spa/include"));
 
         return lib;
+    }
+};
+
+pub fn namespace(library: *std.Build.Step.Compile, symbol: []const u8) void {
+    const b = library.root_module.owner;
+    library.root_module.addCMacro(
+        symbol,
+        b.fmt("{f}", .{Namespaced.init(library.name, symbol)}),
+    );
+}
+
+pub const Namespaced = struct {
+    prefix: []const u8,
+    symbol: []const u8,
+
+    pub fn init(prefix: []const u8, symbol: []const u8) Namespaced {
+        return .{
+            .prefix = prefix,
+            .symbol = symbol,
+        };
+    }
+
+    pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        for (self.prefix) |c| {
+            switch (c) {
+                '-' => try writer.writeByte('_'),
+                else => try writer.writeByte(c),
+            }
+        }
+        try writer.writeAll("__");
+        try writer.writeAll(self.symbol);
     }
 };

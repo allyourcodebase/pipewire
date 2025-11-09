@@ -61,14 +61,14 @@ struct data {
 
 static void handle_events(struct data *data)
 {
-	SDL_Event event;
-	while (SDL_PollEvent(&event)) {
-		switch (event.type) {
-		case SDL_EVENT_QUIT:
-			pw_main_loop_quit(data->loop);
-			break;
-		}
-	}
+	// SDL_Event event;
+	// while (SDL_PollEvent(&event)) {
+	// 	switch (event.type) {
+	// 	case SDL_EVENT_QUIT:
+	// 		pw_main_loop_quit(data->loop);
+	// 		break;
+	// 	}
+	// }
 }
 
 /* our data processing function is in general:
@@ -147,19 +147,19 @@ on_process(void *_data)
 		data->cursor_rect.w = mb->size.width;
 		data->cursor_rect.h = mb->size.height;
 
-		if (data->cursor == NULL) {
-			data->cursor = SDL_CreateTexture(data->renderer,
-						 id_to_sdl_format(mb->format),
-						 SDL_TEXTUREACCESS_STREAMING,
-						 mb->size.width, mb->size.height);
-			SDL_SetTextureBlendMode(data->cursor, SDL_BLENDMODE_BLEND);
-		}
+		// if (data->cursor == NULL) {
+		// 	data->cursor = SDL_CreateTexture(data->renderer,
+		// 				 id_to_sdl_format(mb->format),
+		// 				 SDL_TEXTUREACCESS_STREAMING,
+		// 				 mb->size.width, mb->size.height);
+		// 	SDL_SetTextureBlendMode(data->cursor, SDL_BLENDMODE_BLEND);
+		// }
 
 
-		if (!SDL_LockTexture(data->cursor, NULL, &cdata, &cstride)) {
-			fprintf(stderr, "Couldn't lock cursor texture: %s\n", SDL_GetError());
-			goto done;
-		}
+		// if (!SDL_LockTexture(data->cursor, NULL, &cdata, &cstride)) {
+		// 	fprintf(stderr, "Couldn't lock cursor texture: %s\n", SDL_GetError());
+		// 	goto done;
+		// }
 
 		/* copy the cursor bitmap into the texture */
 		src = SPA_PTROFF(mb, mb->offset, uint8_t);
@@ -171,7 +171,7 @@ on_process(void *_data)
 			dst += cstride;
 			src += mb->stride;
 		}
-		SDL_UnlockTexture(data->cursor);
+		// SDL_UnlockTexture(data->cursor);
 
 		render_cursor = true;
 	}
@@ -181,22 +181,22 @@ on_process(void *_data)
 		void *datas[4];
 		sstride = data->stride;
 		if (buf->n_datas == 1) {
-			SDL_UpdateTexture(data->texture, NULL,
-					sdata, sstride);
+			// SDL_UpdateTexture(data->texture, NULL,
+			// 		sdata, sstride);
 		} else {
 			datas[0] = sdata;
 			datas[1] = buf->datas[1].data;
 			datas[2] = buf->datas[2].data;
-			SDL_UpdateYUVTexture(data->texture, NULL,
-					datas[0], sstride,
-					datas[1], sstride / 2,
-					datas[2], sstride / 2);
+			// SDL_UpdateYUVTexture(data->texture, NULL,
+			// 		datas[0], sstride,
+			// 		datas[1], sstride / 2,
+			// 		datas[2], sstride / 2);
 		}
 	}
 	else {
-		if (!SDL_LockTexture(data->texture, NULL, &ddata, &dstride)) {
-			fprintf(stderr, "Couldn't lock texture: %s\n", SDL_GetError());
-		}
+		// if (!SDL_LockTexture(data->texture, NULL, &ddata, &dstride)) {
+		// 	fprintf(stderr, "Couldn't lock texture: %s\n", SDL_GetError());
+		// }
 
 		sstride = buf->datas[0].chunk->stride;
 		if (sstride == 0)
@@ -225,16 +225,16 @@ on_process(void *_data)
 				dst += dstride;
 			}
 		}
-		SDL_UnlockTexture(data->texture);
+		// SDL_UnlockTexture(data->texture);
 	}
 
-	SDL_RenderClear(data->renderer);
-	/* now render the video and then the cursor if any */
-	SDL_RenderTexture(data->renderer, data->texture, &data->rect, NULL);
-	if (render_cursor) {
-		SDL_RenderTexture(data->renderer, data->cursor, NULL, &data->cursor_rect);
-	}
-	SDL_RenderPresent(data->renderer);
+	// SDL_RenderClear(data->renderer);
+	// /* now render the video and then the cursor if any */
+	// SDL_RenderTexture(data->renderer, data->texture, &data->rect, NULL);
+	// if (render_cursor) {
+	// 	SDL_RenderTexture(data->renderer, data->cursor, NULL, &data->cursor_rect);
+	// }
+	// SDL_RenderPresent(data->renderer);
 
       done:
 	pw_stream_queue_buffer(stream, b);
@@ -498,15 +498,15 @@ int main(int argc, char *argv[])
 			&stream_events,
 			&data);
 
-	if (!SDL_Init(SDL_INIT_VIDEO)) {
-		fprintf(stderr, "can't initialize SDL: %s\n", SDL_GetError());
-		return -1;
-	}
+	// if (!SDL_Init(SDL_INIT_VIDEO)) {
+	// 	fprintf(stderr, "can't initialize SDL: %s\n", SDL_GetError());
+	// 	return -1;
+	// }
 
-	if (!SDL_CreateWindowAndRenderer("Demo", WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE, &data.window, &data.renderer)) {
-		fprintf(stderr, "can't create window: %s\n", SDL_GetError());
-		return -1;
-	}
+	// if (!SDL_CreateWindowAndRenderer("Demo", WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE, &data.window, &data.renderer)) {
+	// 	fprintf(stderr, "can't create window: %s\n", SDL_GetError());
+	// 	return -1;
+	// }
 
 	/* build the extra parameters to connect with. To connect, we can provide
 	 * a list of supported formats.  We use a builder that writes the param
@@ -543,11 +543,11 @@ int main(int argc, char *argv[])
 	pw_stream_destroy(data.stream);
 	pw_main_loop_destroy(data.loop);
 
-	SDL_DestroyTexture(data.texture);
-	if (data.cursor)
-		SDL_DestroyTexture(data.cursor);
-	SDL_DestroyRenderer(data.renderer);
-	SDL_DestroyWindow(data.window);
+	// SDL_DestroyTexture(data.texture);
+	// if (data.cursor)
+	// 	SDL_DestroyTexture(data.cursor);
+	// SDL_DestroyRenderer(data.renderer);
+	// SDL_DestroyWindow(data.window);
 	pw_deinit();
 
 	return 0;
