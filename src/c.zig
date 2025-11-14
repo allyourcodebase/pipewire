@@ -7412,7 +7412,7 @@ pub fn pw_map_for_each(arg_map: [*c]const struct_pw_map, arg_func: ?*const fn (?
     _ = &res;
     {
         item = @as(@TypeOf(item), @ptrCast(@alignCast((&map.*.items).*.data)));
-        while (@as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(item))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(union_pw_map_item))))))) <= @as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr((&map.*.items).*.data))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast((&map.*.items).*.size))))))) : (item += 1) {
+        while (@as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(item))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(union_pw_map_item)))))))) <= @as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr((&map.*.items).*.data))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast((&map.*.items).*.size))))))) : (item += 1) {
             if (!((item.*.next & @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))) != 0)) if ((blk: {
                 const tmp = func.?(item.*.data, data);
                 res = tmp;
@@ -8542,7 +8542,7 @@ pub fn spa_pod_parser_pod(arg_parser: [*c]struct_spa_pod_parser, arg_pod: [*c]co
     _ = &parser;
     var pod = arg_pod;
     _ = &pod;
-    spa_pod_parser_init(parser, @as(?*const anyopaque, @ptrCast(pod)), @as(u32, @bitCast(@as(c_uint, @truncate(@as(u64, @bitCast(@sizeOf(struct_spa_pod))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(pod)))).*.size))))))));
+    spa_pod_parser_init(parser, @as(?*const anyopaque, @ptrCast(pod)), @as(u32, @bitCast(@as(c_uint, @truncate(@as(u64, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(pod)))).*.size))))))));
 }
 pub fn spa_pod_parser_init_pod_body(arg_parser: [*c]struct_spa_pod_parser, arg_pod: [*c]const struct_spa_pod, arg_body: ?*const anyopaque) callconv(.c) void {
     var parser = arg_parser;
@@ -8651,7 +8651,7 @@ pub fn spa_pod_parser_get_header(arg_parser: [*c]struct_spa_pod_parser, arg_head
     _ = &body;
     var f: [*c]struct_spa_pod_frame = parser.*.state.frame;
     _ = &f;
-    var size: u32 = @as(u32, @bitCast(@as(c_uint, @truncate(if (f != null) @as(u64, @bitCast(@as(c_ulong, f.*.offset))) +% (@as(u64, @bitCast(@sizeOf(struct_spa_pod))) +% @as(u64, @bitCast(@as(c_ulong, (&f.*.pod).*.size)))) else @as(u64, @bitCast(@as(c_ulong, parser.*.size)))))));
+    var size: u32 = @as(u32, @bitCast(@as(c_uint, @truncate(if (f != null) @as(u64, @bitCast(@as(c_ulong, f.*.offset))) +% (@as(u64, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))) +% @as(u64, @bitCast(@as(c_ulong, (&f.*.pod).*.size)))) else @as(u64, @bitCast(@as(c_ulong, parser.*.size)))))));
     _ = &size;
     return spa_pod_parser_read_header(parser, parser.*.state.offset, size, header, header_size, pod_offset, body);
 }
@@ -8679,7 +8679,7 @@ pub fn spa_pod_parser_advance(arg_parser: [*c]struct_spa_pod_parser, arg_pod: [*
     _ = &parser;
     var pod = arg_pod;
     _ = &pod;
-    parser.*.state.offset +%= @as(u32, @bitCast(@as(c_uint, @truncate((((@as(u64, @bitCast(@sizeOf(struct_spa_pod))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(pod)))).*.size)))) -% @as(u64, @bitCast(@as(c_long, @as(c_int, 1))))) | @as(@TypeOf(@as(u64, @bitCast(@sizeOf(struct_spa_pod))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(pod)))).*.size)))), @bitCast(@as(c_long, @as(c_int, 8) - @as(c_int, 1))))) +% @as(u64, @bitCast(@as(c_long, @as(c_int, 1))))))));
+    parser.*.state.offset +%= @as(u32, @bitCast(@as(c_uint, @truncate((((@as(u64, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(pod)))).*.size)))) -% @as(u64, @bitCast(@as(c_long, @as(c_int, 1))))) | @as(@TypeOf(@as(u64, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(pod)))).*.size)))), @bitCast(@as(c_long, @as(c_int, 8) - @as(c_int, 1))))) +% @as(u64, @bitCast(@as(c_long, @as(c_int, 1))))))));
 }
 pub fn spa_pod_parser_next_body(arg_parser: [*c]struct_spa_pod_parser, arg_pod: [*c]struct_spa_pod, arg_body: [*c]?*const anyopaque) callconv(.c) c_int {
     var parser = arg_parser;
@@ -9337,7 +9337,7 @@ pub fn spa_pod_parser_can_collect(arg_pod: [*c]const struct_spa_pod, arg_type: u
     _ = &pod;
     var @"type" = arg_type;
     _ = &@"type";
-    return spa_pod_parser_body_can_collect(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), @"type");
+    return spa_pod_parser_body_can_collect(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), @"type");
 }
 // /home/mason/.cache/zig/p/N-V-__8AAN5NhBR0oTsvnwjPdeNiiDLtEsfXRHd1fv-R3TOv/lib/include/__stdarg_va_arg.h:20:26: warning: unsupported stmt class VAArgExprClass
 
@@ -9460,7 +9460,7 @@ pub fn spa_format_parse(arg_format: [*c]const struct_spa_pod, arg_media_type: [*
     return blk: {
         var _p: struct_spa_pod_parser = undefined;
         _ = &_p;
-        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))));
+        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))));
         break :blk blk_1: {
             var _f: struct_spa_pod_frame = undefined;
             _ = &_f;
@@ -9731,12 +9731,12 @@ pub fn spa_pod_is_inside(arg_pod: ?*const anyopaque, arg_size: u32, arg_iter: ?*
 pub fn spa_pod_next(arg_iter: ?*const anyopaque) callconv(.c) ?*anyopaque {
     var iter = arg_iter;
     _ = &iter;
-    return @as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(iter))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast((((@as(u64, @bitCast(@sizeOf(struct_spa_pod))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(iter)))).*.size)))) -% @as(u64, @bitCast(@as(c_long, @as(c_int, 1))))) | @as(@TypeOf(@as(u64, @bitCast(@sizeOf(struct_spa_pod))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(iter)))).*.size)))), @bitCast(@as(c_long, @as(c_int, 8) - @as(c_int, 1))))) +% @as(u64, @bitCast(@as(c_long, @as(c_int, 1))))))))));
+    return @as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(iter))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast((((@as(u64, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(iter)))).*.size)))) -% @as(u64, @bitCast(@as(c_long, @as(c_int, 1))))) | @as(@TypeOf(@as(u64, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(iter)))).*.size)))), @bitCast(@as(c_long, @as(c_int, 8) - @as(c_int, 1))))) +% @as(u64, @bitCast(@as(c_long, @as(c_int, 1))))))))));
 }
 pub fn spa_pod_prop_first(arg_body: [*c]const struct_spa_pod_object_body) callconv(.c) [*c]struct_spa_pod_prop {
     var body = arg_body;
     _ = &body;
-    return @as([*c]struct_spa_pod_prop, @ptrFromInt(@as(usize, @intCast(@intFromPtr(body))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod_object_body)))))));
+    return @as([*c]struct_spa_pod_prop, @ptrFromInt(@as(usize, @intCast(@intFromPtr(body))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod_object_body))))))));
 }
 pub fn spa_pod_prop_is_inside(arg_body: [*c]const struct_spa_pod_object_body, arg_size: u32, arg_iter: [*c]const struct_spa_pod_prop) callconv(.c) bool {
     var body = arg_body;
@@ -9757,7 +9757,7 @@ pub fn spa_pod_prop_next(arg_iter: [*c]const struct_spa_pod_prop) callconv(.c) [
 pub fn spa_pod_control_first(arg_body: [*c]const struct_spa_pod_sequence_body) callconv(.c) [*c]struct_spa_pod_control {
     var body = arg_body;
     _ = &body;
-    return @as([*c]struct_spa_pod_control, @ptrFromInt(@as(usize, @intCast(@intFromPtr(body))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod_sequence_body)))))));
+    return @as([*c]struct_spa_pod_control, @ptrFromInt(@as(usize, @intCast(@intFromPtr(body))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod_sequence_body))))))));
 }
 pub fn spa_pod_control_is_inside(arg_body: [*c]const struct_spa_pod_sequence_body, arg_size: u32, arg_iter: [*c]const struct_spa_pod_control) callconv(.c) bool {
     var body = arg_body;
@@ -9796,49 +9796,49 @@ pub fn spa_pod_get_bool(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]bool) 
     _ = &pod;
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_bool(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value);
+    return spa_pod_body_get_bool(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value);
 }
 pub fn spa_pod_get_id(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]u32) callconv(.c) c_int {
     var pod = arg_pod;
     _ = &pod;
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_id(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value);
+    return spa_pod_body_get_id(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value);
 }
 pub fn spa_pod_get_int(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]i32) callconv(.c) c_int {
     var pod = arg_pod;
     _ = &pod;
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_int(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value);
+    return spa_pod_body_get_int(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value);
 }
 pub fn spa_pod_get_long(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]i64) callconv(.c) c_int {
     var pod = arg_pod;
     _ = &pod;
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_long(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value);
+    return spa_pod_body_get_long(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value);
 }
 pub fn spa_pod_get_float(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]f32) callconv(.c) c_int {
     var pod = arg_pod;
     _ = &pod;
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_float(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value);
+    return spa_pod_body_get_float(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value);
 }
 pub fn spa_pod_get_double(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]f64) callconv(.c) c_int {
     var pod = arg_pod;
     _ = &pod;
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_double(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value);
+    return spa_pod_body_get_double(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value);
 }
 pub fn spa_pod_get_string(arg_pod: [*c]const struct_spa_pod, arg_value: [*c][*c]const u8) callconv(.c) c_int {
     var pod = arg_pod;
     _ = &pod;
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_string(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value);
+    return spa_pod_body_get_string(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value);
 }
 pub fn spa_pod_copy_string(arg_pod: [*c]const struct_spa_pod, arg_maxlen: usize, arg_dest: [*c]u8) callconv(.c) c_int {
     var pod = arg_pod;
@@ -9847,7 +9847,7 @@ pub fn spa_pod_copy_string(arg_pod: [*c]const struct_spa_pod, arg_maxlen: usize,
     _ = &maxlen;
     var dest = arg_dest;
     _ = &dest;
-    return spa_pod_body_copy_string(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), dest, maxlen);
+    return spa_pod_body_copy_string(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), dest, maxlen);
 }
 pub fn spa_pod_get_bytes(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]?*const anyopaque, arg_len: [*c]u32) callconv(.c) c_int {
     var pod = arg_pod;
@@ -9856,7 +9856,7 @@ pub fn spa_pod_get_bytes(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]?*con
     _ = &value;
     var len = arg_len;
     _ = &len;
-    return spa_pod_body_get_bytes(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value, len);
+    return spa_pod_body_get_bytes(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value, len);
 }
 pub fn spa_pod_get_pointer(arg_pod: [*c]const struct_spa_pod, arg_type: [*c]u32, arg_value: [*c]?*const anyopaque) callconv(.c) c_int {
     var pod = arg_pod;
@@ -9865,28 +9865,28 @@ pub fn spa_pod_get_pointer(arg_pod: [*c]const struct_spa_pod, arg_type: [*c]u32,
     _ = &@"type";
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_pointer(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), @"type", value);
+    return spa_pod_body_get_pointer(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), @"type", value);
 }
 pub fn spa_pod_get_fd(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]i64) callconv(.c) c_int {
     var pod = arg_pod;
     _ = &pod;
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_fd(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value);
+    return spa_pod_body_get_fd(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value);
 }
 pub fn spa_pod_get_rectangle(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]struct_spa_rectangle) callconv(.c) c_int {
     var pod = arg_pod;
     _ = &pod;
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_rectangle(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value);
+    return spa_pod_body_get_rectangle(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value);
 }
 pub fn spa_pod_get_fraction(arg_pod: [*c]const struct_spa_pod, arg_value: [*c]struct_spa_fraction) callconv(.c) c_int {
     var pod = arg_pod;
     _ = &pod;
     var value = arg_value;
     _ = &value;
-    return spa_pod_body_get_fraction(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), value);
+    return spa_pod_body_get_fraction(pod, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), value);
 }
 pub fn spa_pod_get_array_full(arg_pod: [*c]const struct_spa_pod, arg_n_values: [*c]u32, arg_val_size: [*c]u32, arg_val_type: [*c]u32) callconv(.c) ?*anyopaque {
     var pod = arg_pod;
@@ -9897,7 +9897,7 @@ pub fn spa_pod_get_array_full(arg_pod: [*c]const struct_spa_pod, arg_n_values: [
     _ = &val_size;
     var val_type = arg_val_type;
     _ = &val_type;
-    return @as(?*anyopaque, @ptrCast(@constCast(@volatileCast(spa_pod_body_get_array_values(pod, @as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), n_values, val_size, val_type)))));
+    return @as(?*anyopaque, @ptrCast(@constCast(@volatileCast(spa_pod_body_get_array_values(pod, @as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(pod))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), n_values, val_size, val_type)))));
 }
 pub fn spa_pod_get_array(arg_pod: [*c]const struct_spa_pod, arg_n_values: [*c]u32) callconv(.c) ?*anyopaque {
     var pod = arg_pod;
@@ -9954,7 +9954,7 @@ pub fn spa_pod_get_values(arg_pod: [*c]const struct_spa_pod, arg_n_vals: [*c]u32
         _ = &@"type";
         var size: u32 = undefined;
         _ = &size;
-        _ = spa_pod_choice_body_get_values(p, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(p))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), n_vals, choice, &size, &@"type");
+        _ = spa_pod_choice_body_get_values(p, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(p))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), n_vals, choice, &size, &@"type");
         return @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(&p.*.body.child))));
     } else {
         n_vals.* = 1;
@@ -10162,7 +10162,7 @@ pub fn spa_pod_builder_deref_fallback(arg_builder: [*c]struct_spa_pod_builder, a
     if ((@as(c_ulong, @bitCast(@as(c_ulong, offset))) +% @as(c_ulong, 8)) <= @as(c_ulong, @bitCast(@as(c_ulong, size)))) {
         var pod: [*c]struct_spa_pod = @as([*c]struct_spa_pod, @ptrFromInt(@as(usize, @intCast(@intFromPtr(builder.*.data))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(c_ulong, offset)))))));
         _ = &pod;
-        if (((@as(u64, @bitCast(@as(c_ulong, offset))) +% (@as(u64, @bitCast(@sizeOf(struct_spa_pod))) +% @as(u64, @bitCast(@as(c_ulong, pod.*.size))))) <= @as(u64, @bitCast(@as(c_ulong, size)))) and (pod.*.size < (@as(c_uint, 1) << @intCast(20)))) return pod;
+        if (((@as(u64, @bitCast(@as(c_ulong, offset))) +% (@as(u64, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))) +% @as(u64, @bitCast(@as(c_ulong, pod.*.size))))) <= @as(u64, @bitCast(@as(c_ulong, size)))) and (pod.*.size < (@as(c_uint, 1) << @intCast(20)))) return pod;
     }
     return fallback;
 }
@@ -10178,7 +10178,7 @@ pub fn spa_pod_builder_frame(arg_builder: [*c]struct_spa_pod_builder, arg_frame:
     _ = &builder;
     var frame = arg_frame;
     _ = &frame;
-    if ((@as(u64, @bitCast(@as(c_ulong, frame.*.offset))) +% (@as(u64, @bitCast(@sizeOf(struct_spa_pod))) +% @as(u64, @bitCast(@as(c_ulong, (&frame.*.pod).*.size))))) <= @as(u64, @bitCast(@as(c_ulong, builder.*.size)))) return @as([*c]struct_spa_pod, @ptrFromInt(@as(usize, @intCast(@intFromPtr(builder.*.data))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(c_ulong, frame.*.offset)))))));
+    if ((@as(u64, @bitCast(@as(c_ulong, frame.*.offset))) +% (@as(u64, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))) +% @as(u64, @bitCast(@as(c_ulong, (&frame.*.pod).*.size))))) <= @as(u64, @bitCast(@as(c_ulong, builder.*.size)))) return @as([*c]struct_spa_pod, @ptrFromInt(@as(usize, @intCast(@intFromPtr(builder.*.data))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(c_ulong, frame.*.offset)))))));
     return null;
 }
 pub fn spa_pod_builder_push(arg_builder: [*c]struct_spa_pod_builder, arg_frame: [*c]struct_spa_pod_frame, arg_pod: [*c]const struct_spa_pod, arg_offset: u32) callconv(.c) void {
@@ -10351,7 +10351,7 @@ pub fn spa_pod_builder_primitive_body(arg_builder: [*c]struct_spa_pod_builder, a
     _ = &res;
     var r: c_int = undefined;
     _ = &r;
-    var size: u32 = @as(u32, @bitCast(@as(c_uint, @truncate(((@as(u64, @bitCast(@sizeOf(struct_spa_pod))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(p)))).*.size)))) -% @as(u64, @bitCast(@as(c_ulong, body_size)))) -% @as(u64, @bitCast(@as(c_ulong, suffix_size)))))));
+    var size: u32 = @as(u32, @bitCast(@as(c_uint, @truncate(((@as(u64, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(p)))).*.size)))) -% @as(u64, @bitCast(@as(c_ulong, body_size)))) -% @as(u64, @bitCast(@as(c_ulong, suffix_size)))))));
     _ = &size;
     if (builder.*.state.flags != @as(u32, @bitCast(@as(c_int, 1) << @intCast(0)))) {
         {
@@ -10391,7 +10391,7 @@ pub fn spa_pod_builder_primitive(arg_builder: [*c]struct_spa_pod_builder, arg_p:
     _ = &builder;
     var p = arg_p;
     _ = &p;
-    return spa_pod_builder_primitive_body(builder, p, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(p))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))), p.*.size, null, @as(u32, @bitCast(@as(c_int, 0))));
+    return spa_pod_builder_primitive_body(builder, p, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(p))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))), p.*.size, null, @as(u32, @bitCast(@as(c_int, 0))));
 }
 pub fn spa_pod_builder_none(arg_builder: [*c]struct_spa_pod_builder) callconv(.c) c_int {
     var builder = arg_builder;
@@ -10889,7 +10889,7 @@ pub fn spa_pod_copy(arg_pod: [*c]const struct_spa_pod) callconv(.c) [*c]struct_s
     _ = &size;
     var c: [*c]struct_spa_pod = undefined;
     _ = &c;
-    size = @as(u64, @bitCast(@sizeOf(struct_spa_pod))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(pod)))).*.size)));
+    size = @as(u64, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))) +% @as(u64, @bitCast(@as(c_ulong, @as([*c]struct_spa_pod, @ptrCast(@constCast(@volatileCast(pod)))).*.size)));
     if ((blk: {
         const tmp = @as([*c]struct_spa_pod, @ptrCast(@alignCast(malloc(size))));
         c = tmp;
@@ -10918,7 +10918,7 @@ pub fn spa_format_video_raw_parse(arg_format: [*c]const struct_spa_pod, arg_info
     return blk: {
         var _p: struct_spa_pod_parser = undefined;
         _ = &_p;
-        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))));
+        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))));
         break :blk blk_1: {
             var _f: struct_spa_pod_frame = undefined;
             _ = &_f;
@@ -11028,7 +11028,7 @@ pub fn spa_format_video_dsp_parse(arg_format: [*c]const struct_spa_pod, arg_info
     return blk: {
         var _p: struct_spa_pod_parser = undefined;
         _ = &_p;
-        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))));
+        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))));
         break :blk blk_1: {
             var _f: struct_spa_pod_frame = undefined;
             _ = &_f;
@@ -11074,7 +11074,7 @@ pub fn spa_format_video_h264_parse(arg_format: [*c]const struct_spa_pod, arg_inf
     return blk: {
         var _p: struct_spa_pod_parser = undefined;
         _ = &_p;
-        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))));
+        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))));
         break :blk blk_1: {
             var _f: struct_spa_pod_frame = undefined;
             _ = &_f;
@@ -11144,7 +11144,7 @@ pub fn spa_format_video_h265_parse(arg_format: [*c]const struct_spa_pod, arg_inf
     return blk: {
         var _p: struct_spa_pod_parser = undefined;
         _ = &_p;
-        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))));
+        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))));
         break :blk blk_1: {
             var _f: struct_spa_pod_frame = undefined;
             _ = &_f;
@@ -11198,7 +11198,7 @@ pub fn spa_format_video_mjpg_parse(arg_format: [*c]const struct_spa_pod, arg_inf
     return blk: {
         var _p: struct_spa_pod_parser = undefined;
         _ = &_p;
-        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod))))))));
+        spa_pod_parser_init_pod_body(&_p, format, @as(?*const anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(format))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod)))))))));
         break :blk blk_1: {
             var _f: struct_spa_pod_frame = undefined;
             _ = &_f;
@@ -16855,7 +16855,7 @@ pub fn spa_debug_strbuf_format_value(arg_buffer: [*c]struct_spa_strbuf, arg_info
                     _ = spa_strbuf_append(buffer, "< ");
                     if (b.*.child.size >= spa_pod_type_size(b.*.child.type)) {
                         {
-                            p = @as(@TypeOf(p), @ptrCast(@as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(b))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod_array_body)))))))));
+                            p = @as(@TypeOf(p), @ptrCast(@as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(b))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod_array_body))))))))));
                             while ((b.*.child.size > @as(u32, @bitCast(@as(c_int, 0)))) and (@as(c_int, @intFromBool(spa_ptrinside(@as(?*const anyopaque, @ptrCast(b)), @as(usize, @bitCast(@as(c_ulong, size))), p, @as(usize, @bitCast(@as(c_ulong, b.*.child.size))), null))) != 0)) : (p = @as(@TypeOf(p), @ptrCast(@as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(p))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(c_ulong, b.*.child.size)))))))))) {
                                 if ((blk: {
                                     const ref = &i;
@@ -16957,7 +16957,7 @@ pub fn spa_debugc_format(arg_ctx: [*c]struct_spa_debug_context, arg_indent: c_in
             @"type" = val.*.type;
             size = val.*.size;
             if ((((@"type" < @as(u32, @bitCast(SPA_TYPE_None))) or (@"type" >= @as(u32, @bitCast(_SPA_TYPE_LAST)))) or (n_vals < @as(u32, @bitCast(@as(c_int, 1))))) or (size < spa_pod_type_size(@"type"))) continue;
-            vals = @as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(val))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@sizeOf(struct_spa_pod)))))));
+            vals = @as(?*anyopaque, @ptrFromInt(@as(usize, @intCast(@intFromPtr(val))) +% @as(usize, @bitCast(@as(ptrdiff_t, @bitCast(@as(usize, @sizeOf(struct_spa_pod))))))));
             ti = spa_debug_type_find(info, prop.*.key);
             key = if (ti != null) ti.*.name else null;
             spa_strbuf_init(&buf, @as([*c]u8, @ptrCast(@alignCast(&buffer[@as(usize, @intCast(0))]))), @sizeOf([1024]u8));
