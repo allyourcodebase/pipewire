@@ -321,6 +321,42 @@ pub fn build(b: *std.Build) void {
             run_cmd.addArgs(args);
         }
     }
+
+    {
+        const zin = b.dependency("zin", .{
+            .optimize = optimize,
+            .target = target,
+        });
+
+        const screen_play = b.addExecutable(.{
+            .name = "zscreen_play",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/screen_play.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "zin", .module = zin.module("zin") },
+                },
+            }),
+        });
+        screen_play.addIncludePath(b.path("src")); // XXX: temp
+        b.installArtifact(screen_play);
+
+        var dep: std.Build.Dependency = .{ .builder = b };
+        linkAndInstall(b, &dep, screen_play);
+
+        const run_step = b.step("zscreen-play", "Run the screen-play example");
+
+        const run_cmd = b.addRunArtifact(screen_play);
+        run_cmd.setCwd(.{ .cwd_relative = b.getInstallPath(.bin, "") });
+        run_step.dependOn(&run_cmd.step);
+
+        run_cmd.step.dependOn(b.getInstallStep());
+
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+    }
 }
 
 /// You may call this externally to link to libpipewire and install its dependencies alongside the
@@ -349,6 +385,12 @@ const flags: []const []const u8 = &.{
     "-Wno-pedantic",
     "-D_GNU_SOURCE",
     "-DFASTPATH",
+    // Translate C can't translate some of the variadic functions API so they get demoted to
+    // externs. However, since they're present only in headers and marked as `SPA_API_IMPL` which
+    // which defaults to `static inline`, the symbols end up being missing. We instead mark them as
+    // weak so that we don't get duplicate symbols, but are still able to reference the C
+    // implementations.
+    "-DSPA_API_IMPL=__attribute__((weak))",
 };
 
 pub const PluginAndModuleCtx = struct {

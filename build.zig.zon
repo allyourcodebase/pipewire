@@ -20,6 +20,10 @@
             .url = "git+https://github.com/allyourcodebase/SDL3#af9c32ce4824e0ad4337447434c40f2b672faf94",
             .hash = "sdl-0.0.0-i4QD0btgqAABajEXrQnyZr1xVsk7LM48w2nBmuQ5gdfr",
         },
+        .zin = .{
+            .url = "git+https://github.com/marler8997/zin#d3e230690f09debdb99dffe4586ad19f9dfb4716",
+            .hash = "zin-0.0.0-W7QDx6kKAwCVg-wWMO4FdpvZMH66NJpc9wFDdxp5c8E2",
+        },
     },
     .paths = .{
         "LICENSE",
