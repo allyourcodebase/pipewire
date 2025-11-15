@@ -284,34 +284,30 @@ pub fn build(b: *std.Build) void {
         });
     }
 
-    // Build the examples
     {
-        const screen_play = b.addExecutable(.{
-            .name = "screen_play",
+        const video_play = b.addExecutable(.{
+            .name = "video-play",
             .root_module = b.createModule(.{
+                .root_source_file = b.path("src/video_play.zig"),
                 .target = target,
                 .optimize = optimize,
             }),
         });
-        screen_play.addCSourceFile(.{
-            .file = b.path("src/screen-play.c"),
-        });
-        b.installArtifact(screen_play);
-
-        screen_play.linkLibC();
 
         const sdl = b.dependency("sdl", .{
             .optimize = optimize,
             .target = target,
         });
-        screen_play.linkLibrary(sdl.artifact("SDL3"));
+
+        video_play.linkLibrary(sdl.artifact("SDL3"));
+        b.installArtifact(video_play);
 
         var dep: std.Build.Dependency = .{ .builder = b };
-        linkAndInstall(b, &dep, screen_play);
+        linkAndInstall(b, &dep, video_play);
 
-        const run_step = b.step("screen-play", "Run the screen-play example");
+        const run_step = b.step("video-play", "Run the video-play example");
 
-        const run_cmd = b.addRunArtifact(screen_play);
+        const run_cmd = b.addRunArtifact(video_play);
         run_cmd.setCwd(.{ .cwd_relative = b.getInstallPath(.bin, "") });
         run_step.dependOn(&run_cmd.step);
 
@@ -349,6 +345,18 @@ const flags: []const []const u8 = &.{
     "-Wno-pedantic",
     "-D_GNU_SOURCE",
     "-DFASTPATH",
+    // Translate C can't translate some of the variadic functions API so they get demoted to
+    // externs. However, since they're present only in headers and marked as `SPA_API_IMPL` which
+    // which defaults to `static inline`, the symbols end up being missing. We instead mark them as
+    // weak so that we don't get duplicate symbols, but are still able to reference the C
+    // implementations.
+    "-DSPA_API_IMPL=__attribute__((weak))",
+
+    "-Ddlopen=__wrap_dlopen",
+    "-Ddlclose=__wrap_dlclose",
+    "-Ddlsym=__wrap_dlsym",
+    "-Ddlerror=__wrap_dlerror",
+    "-Ddlinfo=__wrap_dlinfo",
 };
 
 pub const PluginAndModuleCtx = struct {

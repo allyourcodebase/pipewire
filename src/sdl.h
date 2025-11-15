@@ -148,22 +148,21 @@ static inline struct spa_pod *sdl_build_formats(SDL_Renderer * renderer, struct 
 
 	SDL_PropertiesID props = SDL_GetRendererProperties(renderer);
 
-	// const SDL_PixelFormat *texture_formats = nullptr;
-	// SDL_GetPointerProperty(
-	// 	props,
-	// 	SDL_PROP_RENDERER_TEXTURE_FORMATS_POINTER,
-	// 	NULL
-	// );
+	const SDL_PixelFormat *texture_formats = SDL_GetPointerProperty(
+		props,
+		SDL_PROP_RENDERER_TEXTURE_FORMATS_POINTER,
+		NULL
+	);
 
 	/* first the formats supported by the textures */
-	// for (i = 0, c = 0; texture_formats[i] != SDL_PIXELFORMAT_UNKNOWN; i++) {
-	// 	uint32_t id = sdl_format_to_id(texture_formats[i]);
-	// 	if (id == 0)
-	// 		continue;
-	// 	if (c++ == 0)
-	// 		spa_pod_builder_id(b, SPA_VIDEO_FORMAT_UNKNOWN);
-	// 	spa_pod_builder_id(b, id);
-	// }
+	for (i = 0, c = 0; texture_formats[i] != SDL_PIXELFORMAT_UNKNOWN; i++) {
+		uint32_t id = sdl_format_to_id(texture_formats[i]);
+		if (id == 0)
+			continue;
+		if (c++ == 0)
+			spa_pod_builder_id(b, SPA_VIDEO_FORMAT_UNKNOWN);
+		spa_pod_builder_id(b, id);
+	}
 	/* then all the other ones SDL can convert from/to */
 	SPA_FOR_EACH_ELEMENT_VAR(sdl_video_formats, f) {
 		uint32_t id = f->id;
@@ -173,12 +172,11 @@ static inline struct spa_pod *sdl_build_formats(SDL_Renderer * renderer, struct 
 	spa_pod_builder_id(b, SPA_VIDEO_FORMAT_RGBA_F32);
 	spa_pod_builder_pop(b, &f[1]);
 	/* add size and framerate ranges */
-	// uint64_t max_texture_size = SDL_GetNumberProperty(
-	// 	props,
-	// 	SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER,
-	// 	0
-	// );
-	uint64_t max_texture_size = 4096;
+	uint64_t max_texture_size = SDL_GetNumberProperty(
+		props,
+		SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER,
+		0
+	);
 	spa_pod_builder_add(b,
 		SPA_FORMAT_VIDEO_size,      SPA_POD_CHOICE_RANGE_Rectangle(
 							&SPA_RECTANGLE(WIDTH, HEIGHT),

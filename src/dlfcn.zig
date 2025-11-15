@@ -1,3 +1,4 @@
+// XXX: would like to make part of the main zig program so that we can change log levels
 const std = @import("std");
 
 const log = std.log.scoped(.dl);
@@ -10,7 +11,7 @@ pub const c = @cImport({
 });
 
 const plugins = struct {
-    const SpaHandleFactoryEnum = @TypeOf(c.spa_handle_factory_enum);
+    const SpaHandleFactoryEnum = fn (?*anyopaque, factory: ?*anyopaque) callconv(.c) c_int;
 
     pub extern const spa_support__spa_handle_factory_enum: SpaHandleFactoryEnum;
     pub extern const spa_videoconvert__spa_handle_factory_enum: SpaHandleFactoryEnum;
@@ -20,7 +21,7 @@ const plugins = struct {
 };
 
 const modules = struct {
-    const PipewireModuleInit = fn (_: *anyopaque, _: *anyopaque) callconv(.c) void;
+    const PipewireModuleInit = fn (_: ?*anyopaque, _: ?*anyopaque) callconv(.c) void;
 
     pub extern const pipewire_module_protocol_native__pipewire__module_init: PipewireModuleInit;
     pub extern const pipewire_module_client_node__pipewire__module_init: PipewireModuleInit;
@@ -221,20 +222,22 @@ const libs: std.StaticStringMap(Lib) = .initComptime(.{
     },
 });
 
-export fn dlopen(path: ?[*:0]const u8, mode: std.c.RTLD) callconv(.c) ?*anyopaque {
+export fn __wrap_dlopen(path: ?[*:0]const u8, mode: std.c.RTLD) callconv(.c) ?*anyopaque {
     const span = if (path) |p| std.mem.span(p) else Lib.main_program_name;
     const lib = if (libs.getIndex(span)) |index| &libs.kvs.values[index] else null;
-    log.info("dlopen(\"{f}\", {f}) -> {?f}", .{ std.zig.fmtString(span), FmtMode.init(mode), lib });
+    // log.debug("dlopen(\"{f}\", {f}) -> {?f}", .{ std.zig.fmtString(span), FmtMode.init(mode), lib }); // XXX: ...
+    _ = mode;
     return @ptrCast(@constCast(lib));
 }
 
-export fn dlclose(handle: ?*anyopaque) callconv(.c) c_int {
+export fn __wrap_dlclose(handle: ?*anyopaque) callconv(.c) c_int {
     const lib: *const Lib = @ptrCast(@alignCast(handle.?));
-    log.info("dlclose({f})", .{lib});
+    // log.debug("dlclose({f})", .{lib}); // XXX; ...
+    _ = lib;
     return 0;
 }
 
-export fn dlsym(noalias handle: ?*anyopaque, noalias name: [*:0]u8) ?*anyopaque {
+export fn __wrap_dlsym(noalias handle: ?*anyopaque, noalias name: [*:0]u8) ?*anyopaque {
     const lib: *const Lib = @ptrCast(@alignCast(handle.?));
     const span = std.mem.span(name);
     var msg: ?[:0]const u8 = null;
@@ -248,26 +251,29 @@ export fn dlsym(noalias handle: ?*anyopaque, noalias name: [*:0]u8) ?*anyopaque 
         };
         break :b symbol;
     };
-    log.info("dlsym({f}, \"{f}\") -> 0x{x} ({s})", .{
-        lib,
-        std.zig.fmtString(span),
-        @intFromPtr(symbol),
-        if (msg) |m| m else "success",
-    });
+    // log.debug("dlsym({f}, \"{f}\") -> 0x{x} ({s})", .{
+    //     lib,
+    //     std.zig.fmtString(span),
+    //     @intFromPtr(symbol),
+    //     if (msg) |m| m else "success",
+    // }); // XXX: ...
     if (msg) |m| err = m;
     return symbol;
 }
 
 var err: ?[*:0]const u8 = null;
-export fn dlerror() ?[*:0]const u8 {
+export fn __wrap_dlerror() ?[*:0]const u8 {
     const result = err;
     err = null;
     return result;
 }
 
-export fn dlinfo(noalias handle: ?*anyopaque, request: c_int, noalias info: ?*anyopaque) c_int {
+export fn __wrap_dlinfo(noalias handle: ?*anyopaque, request: c_int, noalias info: ?*anyopaque) c_int {
     const lib: *const Lib = @ptrCast(@alignCast(handle.?));
-    log.info("dlinfo({f}, {}, {x})", .{ lib, request, @intFromPtr(info) });
+    // log.debug("dlinfo({f}, {}, {x})", .{ lib, request, @intFromPtr(info) }); // XXX: ...
+    _ = lib;
+    _ = info;
+    _ = request;
     @panic("unimplemented");
 }
 
