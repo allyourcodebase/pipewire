@@ -371,6 +371,7 @@ pub fn linkAndInstall(
     });
 }
 
+/// Flags uses for all pipewire libraries.
 const flags: []const []const u8 = &.{
     // Common build flags for libpipewire.
     "-fvisibility=hidden",
@@ -388,7 +389,8 @@ const flags: []const []const u8 = &.{
     // implementations.
     "-DSPA_API_IMPL=__attribute__((weak))",
 
-    // Wrap standard library functions we want to replace.
+    // Wrap the standard library functions we want to replace with our own implementations to avoid
+    // relying on a dynamic linker.
     "-Ddlopen=__wrap_dlopen",
     "-Ddlclose=__wrap_dlclose",
     "-Ddlsym=__wrap_dlsym",
@@ -407,6 +409,8 @@ pub const PluginAndModuleCtx = struct {
     libpipewire: *std.Build.Step.Compile,
 };
 
+/// A pipewire module. These are typically opened with `dlopen`, but we're going to link to them
+/// statically.
 pub const PipewireModule = struct {
     name: []const u8,
     files: []const []const u8,
@@ -445,6 +449,8 @@ pub const PipewireModule = struct {
     }
 };
 
+/// A pipewire plugin. These are typically opened with `dlopen`, but we're going to link to them
+/// statically.
 pub const PipewirePlugin = struct {
     name: []const u8,
     files: []const []const u8,
@@ -485,6 +491,7 @@ pub const PipewirePlugin = struct {
     }
 };
 
+/// Namespaces a symbol using the preprocessor.
 pub fn namespace(library: *std.Build.Step.Compile, symbol: []const u8) void {
     const b = library.root_module.owner;
     library.root_module.addCMacro(
@@ -493,6 +500,7 @@ pub fn namespace(library: *std.Build.Step.Compile, symbol: []const u8) void {
     );
 }
 
+/// A namespaced symbol.
 pub const Namespaced = struct {
     prefix: []const u8,
     symbol: []const u8,
