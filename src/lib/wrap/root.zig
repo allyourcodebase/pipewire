@@ -4,7 +4,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 pub const dlfcn = @import("dlfcn.zig");
-pub const fcntl = @import("fcntl.zig");
+pub const fs = @import("fs.zig");
 
 // Check type assumptions.
 comptime {

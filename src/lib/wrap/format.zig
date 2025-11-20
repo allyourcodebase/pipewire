@@ -35,6 +35,11 @@ pub fn FmtFlags(T: type) type {
                         try prefix(writer, &first);
                         try writer.print(".{s} = {x}", .{ field.name, val });
                     },
+                    .@"enum" => {
+                        if (val != enumFromInt(field.type, 0)) {
+                            try writer.print(".{s} = {t}", .{ field.name, val });
+                        }
+                    },
                     else => if (!std.meta.eql(val, std.mem.zeroes(field.type))) {
                         try prefix(writer, &first);
                         try writer.print(".{s} = {any}", .{ field.name, val });
@@ -45,4 +50,24 @@ pub fn FmtFlags(T: type) type {
             try writer.writeAll("}");
         }
     };
+}
+
+// Forked from std to fix bug, will upstream.
+pub fn enumFromInt(comptime E: type, integer: anytype) ?E {
+    const enum_info = @typeInfo(E).@"enum";
+    if (comptime !enum_info.is_exhaustive) {
+        if (std.math.cast(enum_info.tag_type, integer)) |tag| {
+            return @enumFromInt(tag);
+        }
+        return null;
+    }
+    // We don't directly iterate over the fields of E, as that
+    // would require an inline loop. Instead, we create an array of
+    // values that is comptime-know, but can be iterated at runtime
+    // without requiring an inline loop.
+    // This generates better machine code.
+    for (std.enums.values(E)) |value| {
+        if (@intFromEnum(value) == integer) return value;
+    }
+    return null;
 }

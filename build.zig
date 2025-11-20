@@ -364,7 +364,6 @@ const flags: []const []const u8 = &.{
     // implementations.
     "-DSPA_API_IMPL=__attribute__((weak))",
 
-    // XXX: make function like to check arg counts
     // Wrap the standard library functions we want to replace with our own implementations to avoid
     // relying on a dynamic linker.
     "-Ddlopen=__wrap_dlopen",
@@ -376,6 +375,9 @@ const flags: []const []const u8 = &.{
     "-Daccess=__wrap_access",
     "-Dopen=__wrap_open",
     "-Dclose=__wrap_close",
+    "-Dfstat=__wrap_fstat",
+    "-Dmmap=__wrap_mmap",
+    "-Dmunmap=__wrap_munmap",
 
     // Since `spa_autoclose` points to a function defined in a header, its close doesn't get
     // wrapped. Wrap it manually.
