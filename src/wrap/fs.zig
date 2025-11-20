@@ -1,5 +1,6 @@
-//! Pipewire loads some config at runtime. This file stubs out the access to that config, thereby
-//! removing the requirement to ship config files alongside your executable or have a dependence on
+//! Pipewire checks for the presence of dynamic libraries and loads some config at runtime. This
+//! file stubs out the relevant file system accesses so the dynamic libraries don't need to be
+//! present, and the config files don't need to be shipped with the executable.
 //! user installed config files.
 
 const std = @import("std");

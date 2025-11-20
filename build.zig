@@ -32,7 +32,7 @@ pub fn build(b: *std.Build) void {
         .name = "pipewire-0.3",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/lib/wrap/root.zig"),
+            .root_source_file = b.path("src/wrap/root.zig"),
             .target = target,
             .optimize = optimize,
             .link_libc = true,
@@ -105,7 +105,6 @@ pub fn build(b: *std.Build) void {
             const install_conf = b.addUpdateSourceFiles();
             install_conf.addCopyFileToSource(client_conf, b.pathJoin(&.{
                 "src",
-                "lib",
                 "wrap",
                 "client.conf",
             }));
@@ -297,13 +296,15 @@ pub fn build(b: *std.Build) void {
 
     // Create the zig module. Using this rather than the static library allows for easier
     // integration, and ties logging to the standard library logger.
-    const pipewire_zig = b.addModule("pipewire", .{
+    const libpipewire_zig = b.addModule("pipewire", .{
         .root_source_file = b.path("src/lib/root.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "c", .module = c }},
+        .imports = &.{
+            .{ .name = "c", .module = c },
+            .{ .name = "wrap", .module = libpipewire.root_module },
+        },
     });
-    pipewire_zig.linkLibrary(libpipewire);
 
     // Build the video play example.
     {
@@ -322,7 +323,7 @@ pub fn build(b: *std.Build) void {
         });
 
         if (use_zig_module) {
-            video_play.root_module.addImport("pipewire", pipewire_zig);
+            video_play.root_module.addImport("pipewire", libpipewire_zig);
         } else {
             video_play.linkLibrary(libpipewire);
             video_play.root_module.addImport("pipewire", c);
