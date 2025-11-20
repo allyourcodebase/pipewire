@@ -90,6 +90,7 @@ pub fn build(b: *std.Build) void {
             .flags = flags,
         });
 
+        // XXX: don't install this, embed it
         // Build and install the library configuration
         {
             const generate_conf = b.addExecutable(.{
@@ -342,6 +343,7 @@ pub fn build(b: *std.Build) void {
         const run_step = b.step("video-play", "Run the video-play example");
 
         const run_cmd = b.addRunArtifact(video_play);
+        // XXX: cwd...
         run_cmd.setCwd(.{ .cwd_relative = b.getInstallPath(.bin, "") });
         run_step.dependOn(&run_cmd.step);
 
@@ -397,6 +399,13 @@ const flags: []const []const u8 = &.{
     "-Ddlerror=__wrap_dlerror",
     "-Ddlinfo=__wrap_dlinfo",
     "-Dstat=__wrap_stat",
+    "-Daccess=__wrap_access",
+    "-Dopen=__wrap_open",
+    "-Dclose=__wrap_close",
+
+    // Since `spa_autoclose` points to a function defined in a header, its close doesn't get
+    // wrapped. Wrap it manually.
+    "-Dspa_autoclose=__attribute__((__cleanup__(__wrap_close)))",
 };
 
 pub const PluginAndModuleCtx = struct {

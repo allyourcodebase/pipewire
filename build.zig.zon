@@ -12,8 +12,10 @@
             .hash = "N-V-__8AAMV2BgB9aKHnchADe5onASuvEqAeRRO7Ai1oTuzW",
         },
         .upstream = .{
-            .url = "git+https://gitlab.freedesktop.org/pipewire/pipewire.git#1.5.81",
-            .hash = "N-V-__8AAKYw2AD301ZQsWszbYSWZQF5y-q4WXJif0UGRvFh",
+            // XXX: ...
+            // .url = "git+https://gitlab.freedesktop.org/pipewire/pipewire.git#1.5.81",
+            // .hash = "N-V-__8AAKYw2AD301ZQsWszbYSWZQF5y-q4WXJif0UGRvFh",
+            .path = "../pipewire",
         },
         // Used by the examples
         .sdl = .{

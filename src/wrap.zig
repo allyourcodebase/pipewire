@@ -2,7 +2,7 @@
 //! dynamic linker. Since the goal of this project is to statically link pipewire, we need to stub
 //! these out.
 //!
-//! This file exports a number of `__wrap_*` functions, and the pipewire build uses the preprocessor
+//! This file pub exports a number of `__wrap_*` functions, and the pipewire build uses the preprocessor
 //! to redirect those calls to here.
 
 const std = @import("std");
@@ -18,19 +18,15 @@ const c = @cImport({
 
 /// Since we're statically linked, we don't support `dlopen`. Instead, we look up "libraries" in the
 /// hard coded `libs` table.
-export fn __wrap_dlopen(path: ?[*:0]const u8, mode: std.c.RTLD) callconv(.c) ?*anyopaque {
+pub export fn __wrap_dlopen(path: ?[*:0]const u8, mode: std.c.RTLD) callconv(.c) ?*anyopaque {
     const span = if (path) |p| std.mem.span(p) else Lib.main_program_name;
     const lib = if (libs.getIndex(span)) |index| &libs.kvs.values[index] else null;
-    log.debug("dlopen(\"{f}\", {f}) -> {?f}", .{
-        std.zig.fmtString(span),
-        FmtFlags(std.c.RTLD).init(mode),
-        lib,
-    });
+    log.debug("dlopen(\"{f}\", {f}) -> {?f}", .{ std.zig.fmtString(span), fmtFlags(mode), lib });
     return @ptrCast(@constCast(lib));
 }
 
 /// Since `dlopen` just returns handles from `libs`, `dlclose` is a noop.
-export fn __wrap_dlclose(handle: ?*anyopaque) callconv(.c) c_int {
+pub export fn __wrap_dlclose(handle: ?*anyopaque) callconv(.c) c_int {
     const lib: *const Lib = @ptrCast(@alignCast(handle.?));
     log.debug("dlclose({f})", .{lib});
     return 0;
@@ -38,7 +34,10 @@ export fn __wrap_dlclose(handle: ?*anyopaque) callconv(.c) c_int {
 
 /// Since `dlopen` just returns handles from `libs`, `dlsym` retrieves symbols from the correct part
 /// of that table.
-export fn __wrap_dlsym(noalias handle: ?*anyopaque, noalias name: [*:0]u8) ?*anyopaque {
+pub export fn __wrap_dlsym(
+    noalias handle: ?*anyopaque,
+    noalias name: [*:0]u8,
+) callconv(.c) ?*anyopaque {
     const lib: *const Lib = @ptrCast(@alignCast(handle.?));
     const span = std.mem.span(name);
     var msg: ?[:0]const u8 = null;
@@ -65,18 +64,18 @@ export fn __wrap_dlsym(noalias handle: ?*anyopaque, noalias name: [*:0]u8) ?*any
 /// Since `dlopen` is allowed to return null on success if the symbol is zero, `dlerror` is a
 /// necessary part of the `dlopen` interface.
 var err: ?[*:0]const u8 = null;
-export fn __wrap_dlerror() ?[*:0]const u8 {
+pub export fn __wrap_dlerror() callconv(.c) ?[*:0]const u8 {
     const result = err;
     err = null;
     return result;
 }
 
 /// We don't support `dlinfo` as pipewire doesn't currently use it. If it's called, crash.
-export fn __wrap_dlinfo(
+pub export fn __wrap_dlinfo(
     noalias handle: ?*anyopaque,
     request: c_int,
     noalias info: ?*anyopaque,
-) c_int {
+) callconv(.c) c_int {
     const lib: *const Lib = @ptrCast(@alignCast(handle.?));
     log.debug("dlinfo({f}, {}, {x})", .{ lib, request, @intFromPtr(info) });
     @panic("unimplemented");
@@ -86,9 +85,8 @@ export fn __wrap_dlinfo(
 /// exist, we wrap `stat` to pretend that they do so it doesn't fail prematurely.
 ///
 /// We do this by faking any stat calls whose paths end with `.so`. All other stat calls from
-/// pipewire are forwarded to the standard implementation as is, though in practice, there probably
-/// shouldn't be any others.
-export fn __wrap_stat(pathname_c: [*:0]const u8, statbuf: *std.os.linux.Stat) usize {
+/// pipewire are forwarded to the standard implementation as is.
+pub export fn __wrap_stat(pathname_c: [*:0]const u8, statbuf: *std.os.linux.Stat) callconv(.c) usize {
     const pathname = std.mem.span(pathname_c);
     const result, const strategy = b: {
         if (std.mem.endsWith(u8, pathname, ".so")) {
@@ -102,9 +100,76 @@ export fn __wrap_stat(pathname_c: [*:0]const u8, statbuf: *std.os.linux.Stat) us
         std.zig.fmtString(pathname),
         statbuf,
         result,
-        FmtFlags(std.os.linux.Stat).init(statbuf.*),
+        fmtFlags(statbuf.*),
         strategy,
     });
+    return result;
+}
+
+/// The path pipewire looks for client config at.
+const client_config_path = "pipewire-0.3/confdata/client.conf";
+var client_config_fd: usize = 0;
+
+/// Pipewire uses `access` to check for the presence of `client.conf`. We stub this out so that
+/// pipewire believes it exists expected path, allowing us to later provide it directly instead of
+/// requiring it be available on the user's computer or at a path relative to the working directory.
+pub export fn __wrap_access(path_c: [*:0]const u8, mode: u32) callconv(.c) usize {
+    const path = std.mem.span(path_c);
+
+    const result, const strategy = b: {
+        if (mode == std.os.linux.R_OK and
+            std.mem.eql(u8, path, client_config_path))
+        {
+            break :b .{ 0, "faked" };
+        } else {
+            break :b .{ std.os.linux.access(path, mode), "real" };
+        }
+    };
+    log.debug("access(\"{f}\", {}) -> {} ({s})", .{
+        std.zig.fmtString(path),
+        mode,
+        result,
+        strategy,
+    });
+    return result;
+}
+
+// XXX: wrong signature--look at the lib cinterface, not the linux one which mathces syscall types.
+// same issue in some other functions I think.
+/// Pipewire uses `open` to open the client config file. If it requests that path we fake the call,
+/// otherwise we pass it through as is. See `__wrap_access` for more information.
+pub export fn __wrap_open(
+    path_c: [*:0]const u8,
+    flags: std.os.linux.O,
+    mode: std.os.linux.mode_t,
+) callconv(.c) usize {
+    const path = std.mem.span(path_c);
+
+    const result, const strategy = b: {
+        if (std.mem.eql(u8, path, client_config_path)) {
+            if (client_config_fd != 0) @panic("client_config_path already open");
+            client_config_fd = std.os.linux.open("/dev/null", flags, mode);
+            break :b .{ client_config_fd, "faked" };
+        } else {
+            break :b .{ std.os.linux.open(path_c, flags, mode), "real" };
+        }
+    };
+    log.debug("open(\"{f}\", {f}, {}) -> {} ({s})", .{
+        std.zig.fmtString(path),
+        fmtFlags(flags),
+        mode,
+        result,
+        strategy,
+    });
+    return result;
+}
+
+/// We wrap close just to null out `client_config_fd` when closed. See `__wrap_access` for more
+/// info.
+pub export fn __wrap_close(fd: i32) callconv(.c) usize {
+    if (fd == client_config_fd) client_config_fd = 0;
+    const result = std.os.linux.close(fd);
+    log.debug("close({}) -> {}", .{ fd, result });
     return result;
 }
 
@@ -353,6 +418,10 @@ const fops = struct {
         return @intCast(std.os.linux.munmap(addr, length));
     }
 };
+
+pub fn fmtFlags(val: anytype) FmtFlags(@TypeOf(val)) {
+    return .init(val);
+}
 
 /// Formats flags, skipping any values that are 0 for brevity.
 fn FmtFlags(T: type) type {
