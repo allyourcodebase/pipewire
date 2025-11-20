@@ -41,7 +41,7 @@ pub fn build(b: *std.Build) void {
         .name = "pipewire-0.3",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/wrap.zig"),
+            .root_source_file = b.path("src/lib/wrap/root.zig"),
             .target = target,
             .optimize = optimize,
             .link_libc = true,
@@ -96,7 +96,7 @@ pub fn build(b: *std.Build) void {
             const generate_conf = b.addExecutable(.{
                 .name = "generate_conf",
                 .root_module = b.createModule(.{
-                    .root_source_file = b.path("src/generate_conf.zig"),
+                    .root_source_file = b.path("src/build/generate_conf.zig"),
                     .target = host_target,
                     .optimize = host_optimize,
                 }),
@@ -293,7 +293,7 @@ pub fn build(b: *std.Build) void {
     // Create the translated C module for importing pipewire headers into Zig. See the source file
     // for why we're caching this rather than using translate c.
     const c = b.createModule(.{
-        .root_source_file = b.path("src/c.zig"),
+        .root_source_file = b.path("src/lib/c.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -302,7 +302,7 @@ pub fn build(b: *std.Build) void {
     // Create the zig module. Using this rather than the static library allows for easier
     // integration, and ties logging to the standard library logger.
     const pipewire_zig = b.addModule("pipewire", .{
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("src/lib/root.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{.{ .name = "c", .module = c }},
@@ -314,7 +314,7 @@ pub fn build(b: *std.Build) void {
         const video_play = b.addExecutable(.{
             .name = "video-play",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("src/video_play.zig"),
+                .root_source_file = b.path("src/examples/video_play.zig"),
                 .target = target,
                 .optimize = optimize,
             }),
@@ -391,6 +391,7 @@ const flags: []const []const u8 = &.{
     // implementations.
     "-DSPA_API_IMPL=__attribute__((weak))",
 
+    // XXX: make function like to check arg counts
     // Wrap the standard library functions we want to replace with our own implementations to avoid
     // relying on a dynamic linker.
     "-Ddlopen=__wrap_dlopen",

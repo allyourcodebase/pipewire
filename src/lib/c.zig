@@ -1,5 +1,3 @@
-//! HACK:
-//!
 //! This file is a hack to unblock me while I wait to land a translate C patch.
 //!
 //! Translate C currently translates `sizeof(T)` to `@sizeOf(T)`, which isn't quite right--it should

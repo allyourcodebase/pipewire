@@ -1,14 +1,12 @@
-//! Pipewire has two different plugin systems that make heavy use of dlopen which requires a
-//! dynamic linker. Since the goal of this project is to statically link pipewire, we need to stub
-//! these out.
-//!
-//! This file pub exports a number of `__wrap_*` functions, and the pipewire build uses the preprocessor
-//! to redirect those calls to here.
+//! Pipewire has two different plugin systems that make heavy use of `dlopen`, which requires a
+//! dynamic linker. However, since it ships with the necessary plugins, there's no reason we can't
+//! just bake these into the executable and then stub out `dlopen` to avoid a dependency on the
+//! dynamic linker.
 
 const std = @import("std");
 
-const log = std.log.scoped(.dl);
-const assert = std.debug.assert;
+const log = std.log.scoped(.wrap_dlfcn);
+const fmtFlags = @import("format.zig").fmtFlags;
 
 const c = @cImport({
     @cInclude("spa/support/plugin.h");
@@ -16,8 +14,10 @@ const c = @cImport({
     @cInclude("dlfcn.h");
 });
 
-/// Since we're statically linked, we don't support `dlopen`. Instead, we look up "libraries" in the
-/// hard coded `libs` table.
+/// The last error.
+var err: ?[*:0]const u8 = null;
+
+/// Look up a library in the hard coded library table.
 pub export fn __wrap_dlopen(path: ?[*:0]const u8, mode: std.c.RTLD) callconv(.c) ?*anyopaque {
     const span = if (path) |p| std.mem.span(p) else Lib.main_program_name;
     const lib = if (libs.getIndex(span)) |index| &libs.kvs.values[index] else null;
@@ -25,15 +25,14 @@ pub export fn __wrap_dlopen(path: ?[*:0]const u8, mode: std.c.RTLD) callconv(.c)
     return @ptrCast(@constCast(lib));
 }
 
-/// Since `dlopen` just returns handles from `libs`, `dlclose` is a noop.
+/// Close is a noop.
 pub export fn __wrap_dlclose(handle: ?*anyopaque) callconv(.c) c_int {
     const lib: *const Lib = @ptrCast(@alignCast(handle.?));
     log.debug("dlclose({f})", .{lib});
     return 0;
 }
 
-/// Since `dlopen` just returns handles from `libs`, `dlsym` retrieves symbols from the correct part
-/// of that table.
+/// Look up a symbol in a hard coded library table.
 pub export fn __wrap_dlsym(
     noalias handle: ?*anyopaque,
     noalias name: [*:0]u8,
@@ -61,13 +60,12 @@ pub export fn __wrap_dlsym(
     return symbol;
 }
 
-/// Since `dlopen` is allowed to return null on success if the symbol is zero, `dlerror` is a
-/// necessary part of the `dlopen` interface.
-var err: ?[*:0]const u8 = null;
+/// Get the last error. Since `dlopen` is allowed to return null on success if the symbol's
+/// value is zero, `dlerror` is a necessary part of the `dlopen` interface.
 pub export fn __wrap_dlerror() callconv(.c) ?[*:0]const u8 {
     const result = err;
     err = null;
-    return result;
+    return @ptrCast(result);
 }
 
 /// We don't support `dlinfo` as pipewire doesn't currently use it. If it's called, crash.
@@ -81,99 +79,7 @@ pub export fn __wrap_dlinfo(
     @panic("unimplemented");
 }
 
-/// Pipewire stats files before trying to open them with `dlopen`. Since the files don't actually
-/// exist, we wrap `stat` to pretend that they do so it doesn't fail prematurely.
-///
-/// We do this by faking any stat calls whose paths end with `.so`. All other stat calls from
-/// pipewire are forwarded to the standard implementation as is.
-pub export fn __wrap_stat(pathname_c: [*:0]const u8, statbuf: *std.os.linux.Stat) callconv(.c) usize {
-    const pathname = std.mem.span(pathname_c);
-    const result, const strategy = b: {
-        if (std.mem.endsWith(u8, pathname, ".so")) {
-            statbuf.* = std.mem.zeroInit(std.os.linux.Stat, .{ .mode = std.c.S.IFREG });
-            break :b .{ 0, "faked" };
-        } else {
-            break :b .{ std.os.linux.stat(pathname_c, statbuf), "real" };
-        }
-    };
-    log.debug("stat(\"{f}\", {*}) -> {} (statbuf.* == {f}) ({s})", .{
-        std.zig.fmtString(pathname),
-        statbuf,
-        result,
-        fmtFlags(statbuf.*),
-        strategy,
-    });
-    return result;
-}
-
-/// The path pipewire looks for client config at.
-const client_config_path = "pipewire-0.3/confdata/client.conf";
-var client_config_fd: usize = 0;
-
-/// Pipewire uses `access` to check for the presence of `client.conf`. We stub this out so that
-/// pipewire believes it exists expected path, allowing us to later provide it directly instead of
-/// requiring it be available on the user's computer or at a path relative to the working directory.
-pub export fn __wrap_access(path_c: [*:0]const u8, mode: u32) callconv(.c) usize {
-    const path = std.mem.span(path_c);
-
-    const result, const strategy = b: {
-        if (mode == std.os.linux.R_OK and
-            std.mem.eql(u8, path, client_config_path))
-        {
-            break :b .{ 0, "faked" };
-        } else {
-            break :b .{ std.os.linux.access(path, mode), "real" };
-        }
-    };
-    log.debug("access(\"{f}\", {}) -> {} ({s})", .{
-        std.zig.fmtString(path),
-        mode,
-        result,
-        strategy,
-    });
-    return result;
-}
-
-// XXX: wrong signature--look at the lib cinterface, not the linux one which mathces syscall types.
-// same issue in some other functions I think.
-/// Pipewire uses `open` to open the client config file. If it requests that path we fake the call,
-/// otherwise we pass it through as is. See `__wrap_access` for more information.
-pub export fn __wrap_open(
-    path_c: [*:0]const u8,
-    flags: std.os.linux.O,
-    mode: std.os.linux.mode_t,
-) callconv(.c) usize {
-    const path = std.mem.span(path_c);
-
-    const result, const strategy = b: {
-        if (std.mem.eql(u8, path, client_config_path)) {
-            if (client_config_fd != 0) @panic("client_config_path already open");
-            client_config_fd = std.os.linux.open("/dev/null", flags, mode);
-            break :b .{ client_config_fd, "faked" };
-        } else {
-            break :b .{ std.os.linux.open(path_c, flags, mode), "real" };
-        }
-    };
-    log.debug("open(\"{f}\", {f}, {}) -> {} ({s})", .{
-        std.zig.fmtString(path),
-        fmtFlags(flags),
-        mode,
-        result,
-        strategy,
-    });
-    return result;
-}
-
-/// We wrap close just to null out `client_config_fd` when closed. See `__wrap_access` for more
-/// info.
-pub export fn __wrap_close(fd: i32) callconv(.c) usize {
-    if (fd == client_config_fd) client_config_fd = 0;
-    const result = std.os.linux.close(fd);
-    log.debug("close({}) -> {}", .{ fd, result });
-    return result;
-}
-
-/// A dynamic library made static.
+/// A fake dynamic library.
 const Lib = struct {
     /// You're allowed to pass null as the path to dlopen, in which case you're supposed to get a
     /// handle to the main program. Pipewire does not appear to use this functionality, so the
@@ -199,7 +105,7 @@ const Lib = struct {
     }
 };
 
-/// Our "dynamic" symbol table.
+/// A fake dynamic symbol table.
 const libs: std.StaticStringMap(Lib) = .initComptime(.{
     .{
         Lib.main_program_name,
@@ -373,7 +279,9 @@ const modules = struct {
     extern const pipewire_module_session_manager__pipewire__module_init: PipewireModuleInit;
 };
 
-/// The `fops` functions pipewire stubs out using `RTLD_NEXT`.
+/// The `fops` functions pipewire stubs out using `RTLD_NEXT`. We forward to the implementations
+/// under the `linux` namespace as these are direct system calls, we don't want to call the externs
+/// as pipewire has overriden these and is using this API to get the originals.
 const fops = struct {
     fn OPENAT64(
         dirfd: c_int,
@@ -418,48 +326,3 @@ const fops = struct {
         return @intCast(std.os.linux.munmap(addr, length));
     }
 };
-
-pub fn fmtFlags(val: anytype) FmtFlags(@TypeOf(val)) {
-    return .init(val);
-}
-
-/// Formats flags, skipping any values that are 0 for brevity.
-fn FmtFlags(T: type) type {
-    return struct {
-        val: T,
-
-        fn init(val: T) @This() {
-            return .{ .val = val };
-        }
-
-        pub fn format(self: anytype, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-            try writer.writeAll(".{");
-            var first = true;
-            inline for (@typeInfo(@TypeOf(self.val)).@"struct".fields) |field| {
-                const val = @field(self.val, field.name);
-                switch (@typeInfo(field.type)) {
-                    .bool => if (val) {
-                        if (!first) {
-                            try writer.writeAll(",");
-                        }
-                        first = false;
-                        try writer.writeAll(" ");
-                        try writer.print(".{s} = true", .{field.name});
-                    },
-                    .int => if (val != 0) {
-                        if (!first) {
-                            try writer.writeAll(", ");
-                            first = false;
-                        }
-                        try writer.print(".{s} = {x}", .{ field.name, val });
-                    },
-                    else => if (!std.meta.eql(val, std.mem.zeroes(field.type))) {
-                        try writer.print(".{s} = {any}", .{ field.name, val });
-                    },
-                }
-            }
-            if (!first) try writer.writeAll(" ");
-            try writer.writeAll("}");
-        }
-    };
-}

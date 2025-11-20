@@ -1,11 +1,11 @@
+//! Generates the pipewire client config. We can almost use `addConfigHeader` for this with the
+//! `autoconf_at` style, but not quite as it adds a c style comment to the first line (explaining
+//! that the file is generated) which isn't allowed by this syntax.
+
 const std = @import("std");
 const options = @import("options");
-
 const assert = std.debug.assert;
 
-/// Generate the pipewire config. We can almost use `addConfigHeader` for this with the
-/// `autoconf_at` style, but not quite as it adds a c style comment to the first line (explaining
-/// that the file is generated) which isn't allowed by this syntax.
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
     defer if (gpa.deinit() != .ok) @panic("leak detected");
