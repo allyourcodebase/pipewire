@@ -27,15 +27,6 @@ pub fn build(b: *std.Build) void {
     // Get the upstream sources
     const upstream = b.dependency("upstream", .{});
 
-    // Create a custom installation directory. This is exposed to end users, so that they can
-    // install pipewire's dependencies alongside their executable.
-    const install_dir = b.addNamedWriteFiles("pipewire-0.3");
-    b.installDirectory(.{
-        .install_dir = .lib,
-        .source_dir = install_dir.getDirectory(),
-        .install_subdir = "pipewire-0.3",
-    });
-
     // Create the pipewire static library
     const libpipewire = b.addLibrary(.{
         .name = "pipewire-0.3",
@@ -90,13 +81,12 @@ pub fn build(b: *std.Build) void {
             .flags = flags,
         });
 
-        // XXX: don't install this, embed it
-        // Build and install the library configuration
+        // Build the library configuration
         {
-            const generate_conf = b.addExecutable(.{
-                .name = "generate_conf",
+            const generate_client_conf = b.addExecutable(.{
+                .name = "generate_client_conf",
                 .root_module = b.createModule(.{
-                    .root_source_file = b.path("src/build/generate_conf.zig"),
+                    .root_source_file = b.path("src/build/generate_client_conf.zig"),
                     .target = host_target,
                     .optimize = host_optimize,
                 }),
@@ -106,13 +96,20 @@ pub fn build(b: *std.Build) void {
             options.addOption([]const u8, "VERSION", b.fmt("\"{s}\"", .{build_zon.version}));
             options.addOption([]const u8, "PIPEWIRE_CONFIG_DIR", "[install path]");
             options.addOption([]const u8, "rtprio_client", b.fmt("{}", .{rtprio_client}));
-            generate_conf.root_module.addOptions("options", options);
+            generate_client_conf.root_module.addOptions("options", options);
 
-            const run_generate_conf = b.addRunArtifact(generate_conf);
-            run_generate_conf.addFileArg(upstream.path("src/daemon/client.conf.in"));
-            const client_conf = run_generate_conf.addOutputFileArg("client.conf");
+            const run_generate_client_conf = b.addRunArtifact(generate_client_conf);
+            run_generate_client_conf.addFileArg(upstream.path("src/daemon/client.conf.in"));
+            const client_conf = run_generate_client_conf.addOutputFileArg("client.conf");
 
-            _ = install_dir.addCopyFile(client_conf, b.pathJoin(&.{ "confdata", "client.conf" }));
+            const install_conf = b.addUpdateSourceFiles();
+            install_conf.addCopyFileToSource(client_conf, b.pathJoin(&.{
+                "src",
+                "lib",
+                "wrap",
+                "client.conf",
+            }));
+            libpipewire.step.dependOn(&install_conf.step);
         }
 
         // Build the library configuration headers
@@ -179,7 +176,6 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
                 .version = version_h,
                 .config = config_h,
-                .install_dir = install_dir,
                 .libpipewire = libpipewire,
             };
 
@@ -337,14 +333,9 @@ pub fn build(b: *std.Build) void {
         video_play.linkLibrary(sdl.artifact("SDL3"));
         b.installArtifact(video_play);
 
-        var dep: std.Build.Dependency = .{ .builder = b };
-        linkAndInstall(b, &dep, video_play);
-
         const run_step = b.step("video-play", "Run the video-play example");
 
         const run_cmd = b.addRunArtifact(video_play);
-        // XXX: cwd...
-        run_cmd.setCwd(.{ .cwd_relative = b.getInstallPath(.bin, "") });
         run_step.dependOn(&run_cmd.step);
 
         run_cmd.step.dependOn(b.getInstallStep());
@@ -353,24 +344,6 @@ pub fn build(b: *std.Build) void {
             run_cmd.addArgs(args);
         }
     }
-}
-
-/// You may call this externally to link to libpipewire and install its dependencies alongside the
-/// binary. Remember that you can import build scripts by module name in your build.zig files.
-pub fn linkAndInstall(
-    b: *std.Build,
-    dep: *std.Build.Dependency,
-    exe: *std.Build.Step.Compile,
-) void {
-    // Statically link libpipewire
-    exe.linkLibrary(dep.artifact("pipewire-0.3"));
-
-    // Install Pipewire's dependencies
-    b.installDirectory(.{
-        .install_dir = .bin,
-        .source_dir = dep.namedWriteFiles("pipewire-0.3").getDirectory(),
-        .install_subdir = "pipewire-0.3",
-    });
 }
 
 /// Flags uses for all pipewire libraries.
@@ -415,7 +388,6 @@ pub const PluginAndModuleCtx = struct {
     version: *std.Build.Step.ConfigHeader,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    install_dir: *std.Build.Step.WriteFile,
     libpipewire: *std.Build.Step.Compile,
 };
 
