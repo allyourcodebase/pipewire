@@ -102,13 +102,9 @@ pub fn build(b: *std.Build) void {
             run_generate_client_conf.addFileArg(upstream.path("src/daemon/client.conf.in"));
             const client_conf = run_generate_client_conf.addOutputFileArg("client.conf");
 
-            const install_conf = b.addUpdateSourceFiles();
-            install_conf.addCopyFileToSource(client_conf, b.pathJoin(&.{
-                "src",
-                "wrap",
-                "client.conf",
+            libpipewire.root_module.addImport("client.conf", b.createModule(.{
+                .root_source_file = client_conf,
             }));
-            libpipewire.step.dependOn(&install_conf.step);
         }
 
         // Build the library configuration headers
