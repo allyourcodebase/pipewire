@@ -19,7 +19,7 @@ This project follows the pristine tarball approach. No modifications are require
 
 You can run the `video-play` example with `zig build video-play` to see the current webcam feed. This currently works without pipewire accessing the dynamic linker, but the example executable isn't fully static since it relies on SDL. I plan to port the example away from SDL so that this can be changed.
 
-Only the pipewire plugins/modules required for this example are currently built. To use other parts of the pipewire API, you may need to add more symbols to [src/wrap/dlfcn.zig](src/wrap/dlfcn.zig).
+Only the pipewire plugins/modules required for this example are currently built. To use other parts of the pipewire API, you may need to add more symbols to [src/wrap/dlfcn.zig](src/wrap/dlfcn.zig) and regenerate `c.zig` if additional pipewire headers are required.
 
 
 ## Usage
@@ -42,3 +42,15 @@ my_zig_exe.root_module.addImport("pipewire", pipewire.module("pipewire"));
 // For C projects, link the `pipewire-0.3` static library.
 my_c_exe.linkLibrary(pipewire.artifact("pipewire-0.3"));
 ```
+
+You can then access pipewire as you would normally from C, you can import the already translated headers from Zig. This is necessary for now as the headers can't yet be translated automatically, in the future you'll be able to use `@cImport` directly:
+```zig
+const pw = @import("pipewire").c;
+
+pw.pw_init(0, null);
+defer pw.pw_deinit();
+
+// ...
+```
+
+See [`src/examples`](`src/examples`) for more information.
