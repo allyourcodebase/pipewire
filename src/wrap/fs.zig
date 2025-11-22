@@ -6,6 +6,7 @@
 const std = @import("std");
 const log = std.log.scoped(.wrap_dlfcn);
 const fmtFlags = @import("format.zig").fmtFlags;
+const dlfcn = @import("dlfcn.zig");
 
 /// The path pipewire looks for client config at.
 const client_config_path = "pipewire-0.3/confdata/client.conf";
@@ -16,14 +17,14 @@ const client_conf: [:0]const u8 = @embedFile("client.conf");
 /// The current client config file descriptor, or -1 if not open.
 var maybe_client_config_fd: ?std.c.fd_t = null;
 
-/// If we're stating a config file, fake the result.
+/// If we're stating a shared library from out table, fake the result.
 pub export fn __wrap_stat(
     noalias pathname_c: [*:0]const u8,
     noalias statbuf: *std.c.Stat,
 ) callconv(.c) c_int {
     const pathname = std.mem.span(pathname_c);
     const result, const strategy = b: {
-        if (std.mem.endsWith(u8, pathname, ".so")) {
+        if (dlfcn.libs.get(pathname) != null) {
             statbuf.* = std.mem.zeroInit(std.c.Stat, .{ .mode = std.c.S.IFREG });
             break :b .{ 0, "faked" };
         } else {

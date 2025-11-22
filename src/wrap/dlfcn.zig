@@ -80,7 +80,7 @@ pub export fn __wrap_dlinfo(
 }
 
 /// A fake dynamic library.
-const Lib = struct {
+pub const Lib = struct {
     /// You're allowed to pass null as the path to dlopen, in which case you're supposed to get a
     /// handle to the main program. Pipewire does not appear to use this functionality, so the
     /// corresponding table under this name.
@@ -106,7 +106,7 @@ const Lib = struct {
 };
 
 /// A fake dynamic symbol table.
-const libs: std.StaticStringMap(Lib) = .initComptime(.{
+pub const libs: std.StaticStringMap(Lib) = .initComptime(.{
     .{
         Lib.main_program_name,
         Lib{
@@ -255,7 +255,7 @@ const libs: std.StaticStringMap(Lib) = .initComptime(.{
 /// Pipewire plugin externs. Note that these symbols have been namespaced with the preprocessor, as
 /// the upstream pipewire source usese the same symbol names for these across all plugins which
 /// would result in duplicate symbols when linking statically.
-const plugins = struct {
+pub const plugins = struct {
     const SpaHandleFactoryEnum = fn (?*anyopaque, factory: ?*anyopaque) callconv(.c) c_int;
 
     extern const spa_support__spa_handle_factory_enum: SpaHandleFactoryEnum;
@@ -268,7 +268,7 @@ const plugins = struct {
 /// Pipewire module externs. Note that these symbols have been namespaced with the preprocessor, as
 /// the upstream pipewire source usese the same symbol names for these across all plugins which
 /// would result in duplicate symbols when linking statically.
-const modules = struct {
+pub const modules = struct {
     const PipewireModuleInit = fn (_: ?*anyopaque, _: ?*anyopaque) callconv(.c) void;
 
     extern const pipewire_module_protocol_native__pipewire__module_init: PipewireModuleInit;
@@ -282,7 +282,7 @@ const modules = struct {
 /// The `fops` functions pipewire stubs out using `RTLD_NEXT`. We forward to the implementations
 /// under the `linux` namespace as these are direct system calls, we don't want to call the externs
 /// as pipewire has overriden these and is using this API to get the originals.
-const fops = struct {
+pub const fops = struct {
     fn OPENAT64(
         dirfd: c_int,
         path: [*:0]const u8,
