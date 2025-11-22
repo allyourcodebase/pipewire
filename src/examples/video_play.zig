@@ -27,17 +27,77 @@ pub const std_options: std.Options = .{
     .log_level = .info,
 };
 
+// XXX: expose this from the library so other people don't have to recreate it
+const pw_log_scope = .pw;
+fn pwLog(
+    object: ?*anyopaque,
+    level: p.spa_log_level,
+    file: [*c]const u8,
+    line: c_int,
+    func: [*c]const u8,
+    fmt: [*c]const u8,
+    ...,
+) callconv(.c) void {
+    pwLogtv(object, level, null, file, line, func, fmt);
+}
+
+fn pwLogtv(
+    object: ?*anyopaque,
+    pw_level: p.spa_log_level,
+    topic: ?*const p.spa_log_topic,
+    file_abs_c: [*c]const u8,
+    line: c_int,
+    func: [*c]const u8,
+    fmt: [*c]const u8,
+    ...,
+) callconv(.c) void {
+    const level: std.log.Level = switch (pw_level) {
+        p.SPA_LOG_LEVEL_NONE => return,
+        p.SPA_LOG_LEVEL_ERROR => .err,
+        p.SPA_LOG_LEVEL_WARN => .warn,
+        p.SPA_LOG_LEVEL_INFO => .info,
+        p.SPA_LOG_LEVEL_DEBUG, p.SPA_LOG_LEVEL_TRACE => .debug,
+        else => .err,
+    };
+    const file = b: {
+        const file_abs = std.mem.span(file_abs_c);
+        const i = std.mem.lastIndexOfAny(u8, file_abs, "\\/") orelse break :b file_abs;
+        break :b file_abs[i + 1 ..];
+    };
+    switch (level) {
+        inline else => |l| {
+            if (!std.log.logEnabled(l, pw_log_scope)) return;
+            // XXX: use c to actually do the formatting into a buf then print here so we can handle
+            // the varargs
+            std.options.logFn(l, pw_log_scope, "{s}:{}: {s}: {s}", .{ file, line, func, fmt });
+        },
+    }
+    // XXX: display these
+    _ = topic;
+    _ = object;
+}
+
 pub fn main() !void {
-    var data: Data = .{};
-
-    var buffer: [1024]u8 align(@alignOf(u32)) = undefined;
-    var b = std.mem.zeroInit(p.spa_pod_builder, .{
-        .data = &buffer,
-        .size = buffer.len,
-    });
-
     p.pw_init(0, null);
     defer p.pw_deinit();
+
+    p.pw_log_set_level(switch (std.options.log_level) {
+        .err => p.SPA_LOG_LEVEL_ERROR,
+        .warn => p.SPA_LOG_LEVEL_WARN,
+        .info => p.SPA_LOG_LEVEL_INFO,
+        .debug => p.SPA_LOG_LEVEL_TRACE,
+    });
+    const logger = &p.pw_log_get()[0];
+    // XXX: make sure this const cast is okay--just verify it was originally mutable
+    const funcs: *p.spa_log_methods = @ptrCast(@alignCast(@constCast(logger.iface.cb.funcs.?)));
+    // XXX: do the first three really all take the same args? what's the difference between them?
+    funcs.log = @ptrCast(&pwLog);
+    funcs.logv = @ptrCast(&pwLog);
+    funcs.logt = @ptrCast(&pwLog);
+    funcs.logtv = @ptrCast(&pwLogtv);
+    p.pw_log_set(logger);
+
+    var data: Data = .{};
 
     // Create a main loop
     data.loop = p.pw_main_loop_new(null).?;
@@ -108,6 +168,12 @@ pub fn main() !void {
         sdl.SDL_DestroyRenderer(data.renderer);
         sdl.SDL_DestroyWindow(data.window);
     }
+
+    var buffer: [1024]u8 align(@alignOf(u32)) = undefined;
+    var b = std.mem.zeroInit(p.spa_pod_builder, .{
+        .data = &buffer,
+        .size = buffer.len,
+    });
 
     // build the extra parameters to connect with. To connect, we can provide a list of supported
     // formats.  We use a builder that writes the param object to the stack.
