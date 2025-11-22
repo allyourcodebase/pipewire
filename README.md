@@ -13,10 +13,10 @@ This library builds pipewire with an alternate implementation of `dlfcn.h` (and 
 
 For more information, see [src/wrap](src/wrap).
 
-*This project follows the pristine tarball approach: no modifications are required to the upstream Pipewire source.*
+This project follows the pristine tarball approach. No modifications are required to the upstream Pipewire source.
 
 ## Status
 
 You can run the `video-play` example with `zig build video-play` to see the current webcam feed. This currently works without Pipewire accessing the dynamic linker, but the example executable isn't fully static since it relies on SDL. I plan to port the example away from SDL so that this can be changed.
 
-Only the Pipewire plugins/modules required for this example are currently built. To use other parts of the Pipewire API, you may need to add more symbols to [src/wrap](src/wrap/dlfcn.zig).
+Only the Pipewire plugins/modules required for this example are currently built. To use other parts of the Pipewire API, you may need to add more symbols to [src/wrap/dlfcn.zig](src/wrap/dlfcn.zig).
