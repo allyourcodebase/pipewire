@@ -4,12 +4,16 @@ const std = @import("std");
 const log = std.log;
 const example_options = @import("example_options");
 
-const p = if (example_options.use_zig_module)
+// Normal code wouldn't do this, this
+const pw = if (example_options.use_zig_module)
     // Example of linking with the pipewire zig module
-    @import("pipewire").c
+    @import("pipewire")
 else
-    // Example of linking with the pipewire static library
-    @import("pipewire");
+    // Example of linking with the pipewire static library. We're wrapping it like this just to
+    // match the Zig module so the rest of the code doesn't need conditionals.
+    struct {
+        pub const c = @import("pipewire");
+    };
 
 const sdl = @cImport({
     @cDefine("WIDTH", std.fmt.comptimePrint("{}", .{width}));
@@ -27,164 +31,25 @@ pub const std_options: std.Options = .{
     .log_level = .info,
 };
 
-// XXX: expose this from the library so other people don't have to recreate it
-const Logger = struct {
-    const default_level = switch (std.options.log_level) {
-        .err => p.SPA_LOG_LEVEL_ERROR,
-        .warn => p.SPA_LOG_LEVEL_WARN,
-        .info => p.SPA_LOG_LEVEL_INFO,
-        .debug => p.SPA_LOG_LEVEL_TRACE,
-    };
-    const scope = .pw;
-
-    pub fn init() p.spa_log {
-        return .{
-            .iface = .{
-                .type = p.SPA_TYPE_INTERFACE_Log,
-                .version = p.SPA_VERSION_LOG,
-                .cb = .{
-                    .funcs = &p.spa_log_methods{
-                        .version = p.SPA_VERSION_LOG_METHODS,
-                        .log = &Methods.log,
-                        .logt = &Methods.logt,
-                        // We have to pointer cast these due to the way the variadic argument list
-                        // is translated.
-                        .logv = @ptrCast(&Methods.logv),
-                        .logtv = @ptrCast(&Methods.logtv),
-                        .topic_init = &Methods.topicInit,
-                    },
-                    // Appears to be unused, likely intended as userdata
-                    .data = null,
-                },
-            },
-            .level = default_level,
-        };
+pub fn main() !void {
+    // If we're linking with the Zig module, set up logging.
+    var logger = if (example_options.use_zig_module) pw.Logger.init() else {};
+    if (example_options.use_zig_module) {
+        pw.c.pw_log_set(&logger);
+        pw.c.pw_log_set_level(pw.Logger.default_level);
     }
 
-    const Methods = struct {
-        fn log(
-            object: ?*anyopaque,
-            pw_level: p.spa_log_level,
-            file_abs_c: [*c]const u8,
-            line: c_int,
-            func: [*c]const u8,
-            fmt: [*c]const u8,
-            ...,
-        ) callconv(.c) void {
-            var args = @cVaStart();
-            defer @cVaEnd(&args);
-            logtv(object, pw_level, null, file_abs_c, line, func, fmt, &args);
-        }
-
-        fn logv(
-            object: ?*anyopaque,
-            pw_level: p.spa_log_level,
-            file_abs_c: [*c]const u8,
-            line: c_int,
-            func: [*c]const u8,
-            fmt: [*c]const u8,
-            args: ?*std.builtin.VaList,
-        ) callconv(.c) void {
-            logtv(object, pw_level, null, file_abs_c, line, func, fmt, args);
-        }
-
-        fn logt(
-            object: ?*anyopaque,
-            pw_level: p.spa_log_level,
-            topic: ?*const p.spa_log_topic,
-            file_abs_c: [*c]const u8,
-            line: c_int,
-            func: [*c]const u8,
-            fmt: [*c]const u8,
-            ...,
-        ) callconv(.c) void {
-            var args = @cVaStart();
-            defer @cVaEnd(&args);
-            logtv(object, pw_level, topic, file_abs_c, line, func, fmt, &args);
-        }
-
-        fn logtv(
-            object: ?*anyopaque,
-            pw_level: p.spa_log_level,
-            topic: ?*const p.spa_log_topic,
-            file_abs_c: [*c]const u8,
-            line: c_int,
-            func: [*c]const u8,
-            fmt: [*c]const u8,
-            args: ?*std.builtin.VaList,
-        ) callconv(.c) void {
-            // Object seems to be ignored by default logger. I believe the messages include it in
-            // the formatted string when relevant.
-            _ = object;
-            // Topics are not useful in practice, they're often redundant with filename and message
-            // content, and we've already uniquely identified the log by file and line number. They
-            // are likely present for topic based filtering which we don't support anyway.
-            _ = topic;
-            // Function names add a lot of noise to the log, and this information can be deduced
-            // from the file name and line number, so we skip it.
-            _ = func;
-
-            // Convert to Zig log levels.
-            const level: std.log.Level = switch (pw_level) {
-                p.SPA_LOG_LEVEL_NONE => return,
-                p.SPA_LOG_LEVEL_ERROR => .err,
-                p.SPA_LOG_LEVEL_WARN => .warn,
-                p.SPA_LOG_LEVEL_INFO => .info,
-                p.SPA_LOG_LEVEL_DEBUG, p.SPA_LOG_LEVEL_TRACE => .debug,
-                else => .err,
-            };
-
-            // We don't want to log absolute file paths. That's overly verbose, and exposes more
-            // information to logs than is likely intended.
-            const file = b: {
-                const file_abs = std.mem.span(file_abs_c);
-                const i = std.mem.lastIndexOfAny(u8, file_abs, "\\/") orelse break :b file_abs;
-                break :b file_abs[i + 1 ..];
-            };
-
-            // Perform the log. We use an inline else to make the level comptime known.
-            switch (level) {
-                inline else => |l| {
-                    if (!std.log.logEnabled(l, scope)) return;
-                    var buf: [1024]u8 = undefined;
-                    const formatted = b: {
-                        const max_len = p.spa_vscnprintf(&buf, buf.len, fmt, @ptrCast(args));
-                        if (max_len < 0) break :b "(formatting failed)";
-                        break :b buf[0..@min(buf.len - 1, @as(usize, @intCast(max_len)))];
-                    };
-                    std.options.logFn(l, scope, "{s}:{}: {s}", .{
-                        file,
-                        line,
-                        formatted,
-                    });
-                },
-            }
-        }
-
-        fn topicInit(object: ?*anyopaque, topic: ?*p.spa_log_topic) callconv(.c) void {
-            // Noop in default implementation as well
-            _ = object;
-            _ = topic;
-        }
-    };
-};
-
-pub fn main() !void {
-    var zlog = Logger.init();
-    p.pw_log_set(&zlog);
-    p.pw_log_set_level(Logger.default_level);
-
-    p.pw_init(0, null);
-    defer p.pw_deinit();
+    pw.c.pw_init(0, null);
+    defer pw.c.pw_deinit();
 
     var data: Data = .{};
 
     // Create a main loop
-    data.loop = p.pw_main_loop_new(null).?;
-    defer p.pw_main_loop_destroy(data.loop);
+    data.loop = pw.c.pw_main_loop_new(null).?;
+    defer pw.c.pw_main_loop_destroy(data.loop);
 
-    _ = p.pw_loop_add_signal(p.pw_main_loop_get_loop(data.loop), p.SIGINT, &doQuit, &data);
-    _ = p.pw_loop_add_signal(p.pw_main_loop_get_loop(data.loop), p.SIGTERM, &doQuit, &data);
+    _ = pw.c.pw_loop_add_signal(pw.c.pw_main_loop_get_loop(data.loop), pw.c.SIGINT, &doQuit, &data);
+    _ = pw.c.pw_loop_add_signal(pw.c.pw_main_loop_get_loop(data.loop), pw.c.SIGTERM, &doQuit, &data);
 
     // create a simple stream, the simple stream manages to core and remote objects for you if you
     // don't need to deal with them
@@ -195,12 +60,12 @@ pub fn main() !void {
     // Pass your events and a user_data pointer as the last arguments. This will inform you about
     // the stream state. The most important event you need to listen to is the process event where
     // you need to consume the data provided to you.
-    const props = p.pw_properties_new(
-        p.PW_KEY_MEDIA_TYPE,
+    const props = pw.c.pw_properties_new(
+        pw.c.PW_KEY_MEDIA_TYPE,
         "Video",
-        p.PW_KEY_MEDIA_CATEGORY,
+        pw.c.PW_KEY_MEDIA_CATEGORY,
         "Capture",
-        p.PW_KEY_MEDIA_ROLE,
+        pw.c.PW_KEY_MEDIA_ROLE,
         "Camera",
         @as(?*anyopaque, null),
     ).?;
@@ -208,15 +73,15 @@ pub fn main() !void {
     var args: std.process.ArgIterator = .init();
     _ = args.next();
     if (args.next()) |arg| {
-        _ = p.pw_properties_set(props, p.PW_KEY_TARGET_OBJECT, arg);
+        _ = pw.c.pw_properties_set(props, pw.c.PW_KEY_TARGET_OBJECT, arg);
     }
 
-    data.stream = p.pw_stream_new_simple(
-        p.pw_main_loop_get_loop(data.loop),
+    data.stream = pw.c.pw_stream_new_simple(
+        pw.c.pw_main_loop_get_loop(data.loop),
         "video-play",
         props,
         &.{
-            .version = p.PW_VERSION_STREAM_EVENTS,
+            .version = pw.c.PW_VERSION_STREAM_EVENTS,
             .state_changed = &onStreamStateChanged,
             .io_changed = &onStreamIoChanged,
             .param_changed = &onStreamParamChanged,
@@ -224,7 +89,7 @@ pub fn main() !void {
         },
         &data,
     ).?;
-    defer p.pw_stream_destroy(data.stream);
+    defer pw.c.pw_stream_destroy(data.stream);
 
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
         log.err("can't initialize SDL: {s}", .{sdl.SDL_GetError()});
@@ -250,49 +115,49 @@ pub fn main() !void {
     }
 
     var buffer: [1024]u8 align(@alignOf(u32)) = undefined;
-    var b = std.mem.zeroInit(p.spa_pod_builder, .{
+    var b = std.mem.zeroInit(pw.c.spa_pod_builder, .{
         .data = &buffer,
         .size = buffer.len,
     });
 
     // build the extra parameters to connect with. To connect, we can provide a list of supported
     // formats.  We use a builder that writes the param object to the stack.
-    var params_buf: [3]?*const p.spa_pod = undefined;
-    var params: std.ArrayList(?*const p.spa_pod) = .initBuffer(&params_buf);
+    var params_buf: [3]?*const pw.c.spa_pod = undefined;
+    var params: std.ArrayList(?*const pw.c.spa_pod) = .initBuffer(&params_buf);
     buildFormat(&data, &b, &params);
 
     {
-        var f: p.spa_pod_frame = undefined;
+        var f: pw.c.spa_pod_frame = undefined;
         // send a tag, input tags travel upstream
-        p.spa_tag_build_start(&b, &f, p.SPA_PARAM_Tag, p.SPA_DIRECTION_INPUT);
-        const items: [1]p.spa_dict_item = .{
-            p.SPA_DICT_ITEM_INIT("my-tag-other-key", "my-special-other-tag-value"),
+        pw.c.spa_tag_build_start(&b, &f, pw.c.SPA_PARAM_Tag, pw.c.SPA_DIRECTION_INPUT);
+        const items: [1]pw.c.spa_dict_item = .{
+            pw.c.SPA_DICT_ITEM_INIT("my-tag-other-key", "my-special-other-tag-value"),
         };
-        p.spa_tag_build_add_dict(&b, &p.SPA_DICT_INIT(items, 1));
-        params.appendBounded(p.spa_tag_build_end(&b, &f)) catch @panic("OOB");
+        pw.c.spa_tag_build_add_dict(&b, &pw.c.SPA_DICT_INIT(items, 1));
+        params.appendBounded(pw.c.spa_tag_build_end(&b, &f)) catch @panic("OOB");
     }
 
     // now connect the stream, we need a direction (input/output),
     // an optional target node to connect to, some flags and parameters
     //
-    const res = p.pw_stream_connect(
+    const res = pw.c.pw_stream_connect(
         data.stream,
-        p.PW_DIRECTION_INPUT,
-        p.PW_ID_ANY,
-        p.PW_STREAM_FLAG_AUTOCONNECT | // try to automatically connect this stream
-            p.PW_STREAM_FLAG_INACTIVE | // we will activate ourselves
-            p.PW_STREAM_FLAG_MAP_BUFFERS, // mmap the buffer data for us
+        pw.c.PW_DIRECTION_INPUT,
+        pw.c.PW_ID_ANY,
+        pw.c.PW_STREAM_FLAG_AUTOCONNECT | // try to automatically connect this stream
+            pw.c.PW_STREAM_FLAG_INACTIVE | // we will activate ourselves
+            pw.c.PW_STREAM_FLAG_MAP_BUFFERS, // mmap the buffer data for us
         // extra parameters, see above
         params.items.ptr,
         @intCast(params.items.len),
     );
     if (res < 0) {
-        log.err("can't connect: {s}", .{p.spa_strerror(res)});
+        log.err("can't connect: {s}", .{pw.c.spa_strerror(res)});
         std.process.exit(1);
     }
 
     // /do things until we quit the mainloop
-    _ = p.pw_main_loop_run(data.loop);
+    _ = pw.c.pw_main_loop_run(data.loop);
 }
 
 const Pixel = extern struct {
@@ -308,14 +173,14 @@ const Data = struct {
     texture: ?*sdl.SDL_Texture = null,
     cursor: ?*sdl.SDL_Texture = null,
 
-    loop: ?*p.pw_main_loop = null,
-    stream: ?*p.pw_stream = null,
+    loop: ?*pw.c.pw_main_loop = null,
+    stream: ?*pw.c.pw_stream = null,
 
-    position: ?*p.spa_io_position = null,
+    position: ?*pw.c.spa_io_position = null,
 
-    format: p.spa_video_info = .{},
+    format: pw.c.spa_video_info = .{},
     stride: i32 = 0,
-    size: p.spa_rectangle = .{},
+    size: pw.c.spa_rectangle = .{},
 
     rect: sdl.SDL_FRect = .{},
     cursor_rect: sdl.SDL_FRect = .{},
@@ -325,7 +190,7 @@ const Data = struct {
 fn doQuit(userdata: ?*anyopaque, signal_number: c_int) callconv(.c) void {
     _ = signal_number;
     const data: *Data = @ptrCast(@alignCast(userdata));
-    _ = p.pw_main_loop_quit(data.loop);
+    _ = pw.c.pw_main_loop_quit(data.loop);
 }
 
 // our data processing function is in general:
@@ -343,19 +208,19 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
 
     var render_cursor = false;
 
-    var maybe_buffer: ?*p.pw_buffer = null;
+    var maybe_buffer: ?*pw.c.pw_buffer = null;
     while (true) {
-        const t = p.pw_stream_dequeue_buffer(stream) orelse break;
-        if (maybe_buffer) |b| _ = p.pw_stream_queue_buffer(stream, b);
+        const t = pw.c.pw_stream_dequeue_buffer(stream) orelse break;
+        if (maybe_buffer) |b| _ = pw.c.pw_stream_queue_buffer(stream, b);
         maybe_buffer = t;
     }
     const b = maybe_buffer orelse {
         log.warn("out of buffers", .{});
         return;
     };
-    defer _ = p.pw_stream_queue_buffer(stream, b);
+    defer _ = pw.c.pw_stream_queue_buffer(stream, b);
 
-    const buf: *p.spa_buffer = b.buffer;
+    const buf: *pw.c.spa_buffer = b.buffer;
 
     log.debug("new buffer {*}", .{buf});
 
@@ -363,16 +228,16 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
 
     const sdata = buf.datas[0].data orelse return;
 
-    const maybe_h: ?*p.spa_meta_header = @ptrCast(@alignCast(p.spa_buffer_find_meta_data(buf, p.SPA_META_Header, @sizeOf(p.spa_meta_header))));
+    const maybe_h: ?*pw.c.spa_meta_header = @ptrCast(@alignCast(pw.c.spa_buffer_find_meta_data(buf, pw.c.SPA_META_Header, @sizeOf(pw.c.spa_meta_header))));
     if (maybe_h) |h| {
-        const now = p.pw_stream_get_nsec(stream);
+        const now = pw.c.pw_stream_get_nsec(stream);
         log.debug("now:{} pts:{} diff:{}", .{ now, h.pts, now - @as(u64, @intCast(h.pts)) });
     }
 
     // get the videocrop metadata if any
-    const maybe_mc: ?*p.spa_meta_region = @ptrCast(@alignCast(p.spa_buffer_find_meta_data(buf, p.SPA_META_VideoCrop, @sizeOf(p.spa_meta_region))));
+    const maybe_mc: ?*pw.c.spa_meta_region = @ptrCast(@alignCast(pw.c.spa_buffer_find_meta_data(buf, pw.c.SPA_META_VideoCrop, @sizeOf(pw.c.spa_meta_region))));
     if (maybe_mc) |mc| {
-        if (p.spa_meta_region_is_valid(mc)) {
+        if (pw.c.spa_meta_region_is_valid(mc)) {
             data.rect.x = @floatFromInt(mc.region.position.x);
             data.rect.y = @floatFromInt(mc.region.position.y);
             data.rect.w = @floatFromInt(mc.region.size.width);
@@ -380,13 +245,13 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
         }
     }
     // get cursor metadata
-    const maybe_mcs: ?*p.spa_meta_cursor = @ptrCast(@alignCast(p.spa_buffer_find_meta_data(buf, p.SPA_META_Cursor, @sizeOf(p.spa_meta_cursor))));
+    const maybe_mcs: ?*pw.c.spa_meta_cursor = @ptrCast(@alignCast(pw.c.spa_buffer_find_meta_data(buf, pw.c.SPA_META_Cursor, @sizeOf(pw.c.spa_meta_cursor))));
     if (maybe_mcs) |mcs| {
-        if (p.spa_meta_cursor_is_valid(mcs)) {
+        if (pw.c.spa_meta_cursor_is_valid(mcs)) {
             data.cursor_rect.x = @floatFromInt(mcs.position.x);
             data.cursor_rect.y = @floatFromInt(mcs.position.y);
 
-            const mb: *p.spa_meta_bitmap = @ptrFromInt(@intFromPtr(mcs) + mcs.bitmap_offset);
+            const mb: *pw.c.spa_meta_bitmap = @ptrFromInt(@intFromPtr(mcs) + mcs.bitmap_offset);
             data.cursor_rect.w = @floatFromInt(mb.size.width);
             data.cursor_rect.h = @floatFromInt(mb.size.height);
 
@@ -460,7 +325,7 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
         var src: [*]u8 = @ptrCast(sdata);
         var dst: [*]u8 = @ptrCast(ddata);
 
-        if (data.format.media_subtype == p.SPA_MEDIA_SUBTYPE_dsp) {
+        if (data.format.media_subtype == pw.c.SPA_MEDIA_SUBTYPE_dsp) {
             for (0..data.size.height) |_| {
                 const pixel: [*]Pixel = @ptrCast(@alignCast(src));
                 for (0..data.size.width) |j| {
@@ -498,7 +363,7 @@ fn handleEvents(data: *Data) void {
     while (sdl.SDL_PollEvent(&event)) {
         switch (event.type) {
             sdl.SDL_EVENT_QUIT => {
-                _ = p.pw_main_loop_quit(data.loop);
+                _ = pw.c.pw_main_loop_quit(data.loop);
             },
             else => {},
         }
@@ -507,18 +372,18 @@ fn handleEvents(data: *Data) void {
 
 fn onStreamStateChanged(
     userdata: ?*anyopaque,
-    old: p.pw_stream_state,
-    state: p.pw_stream_state,
+    old: pw.c.pw_stream_state,
+    state: pw.c.pw_stream_state,
     err: [*c]const u8,
 ) callconv(.c) void {
     _ = old;
     _ = err;
     const data: *Data = @ptrCast(@alignCast(userdata));
-    log.info("stream state: \"{s}\"", .{p.pw_stream_state_as_string(state)});
+    log.info("stream state: \"{s}\"", .{pw.c.pw_stream_state_as_string(state)});
     switch (state) {
-        p.PW_STREAM_STATE_UNCONNECTED => _ = p.pw_main_loop_quit(data.loop),
+        pw.c.PW_STREAM_STATE_UNCONNECTED => _ = pw.c.pw_main_loop_quit(data.loop),
         // because we started inactive, activate ourselves now
-        p.PW_STREAM_STATE_PAUSED => _ = p.pw_stream_set_active(data.stream, true),
+        pw.c.PW_STREAM_STATE_PAUSED => _ = pw.c.pw_stream_set_active(data.stream, true),
         else => {},
     }
 }
@@ -526,7 +391,7 @@ fn onStreamStateChanged(
 fn onStreamIoChanged(userdata: ?*anyopaque, id: u32, area: ?*anyopaque, size: u32) callconv(.c) void {
     _ = size;
     const data: *Data = @ptrCast(@alignCast(userdata));
-    if (id == p.SPA_IO_Position) {
+    if (id == pw.c.SPA_IO_Position) {
         data.position = @ptrCast(@alignCast(area));
     }
 }
@@ -541,11 +406,11 @@ fn onStreamIoChanged(userdata: ?*anyopaque, id: u32, area: ?*anyopaque, size: u3
 // As part of pw_stream_finish_format() we can provide parameters that
 // will control the buffer memory allocation. This includes the metadata
 // that we would like on our buffer, the size, alignment, etp.
-fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const p.spa_pod) callconv(.c) void {
+fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const pw.c.spa_pod) callconv(.c) void {
     const data: *Data = @ptrCast(@alignCast(userdata));
     const stream = data.stream;
     var params_buffer: [1024]u8 align(@alignOf(u32)) = undefined;
-    var b: p.spa_pod_builder = .{
+    var b: pw.c.spa_pod_builder = .{
         .data = &params_buffer,
         .size = params_buffer.len,
         ._padding = 0,
@@ -553,51 +418,51 @@ fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const p.spa_p
         .callbacks = .{ .funcs = null, .data = null },
     };
 
-    if (param != null and id == p.SPA_PARAM_Tag) {
+    if (param != null and id == pw.c.SPA_PARAM_Tag) {
         log.err("invalid pod", .{});
         return;
     }
-    if (param != null and id == p.SPA_PARAM_Latency) {
-        var info: p.spa_latency_info = undefined;
-        if (p.spa_latency_parse(param, &info) >= 0) {
+    if (param != null and id == pw.c.SPA_PARAM_Latency) {
+        var info: pw.c.spa_latency_info = undefined;
+        if (pw.c.spa_latency_parse(param, &info) >= 0) {
             log.info("got latency: {}", .{@divTrunc((info.min_ns + info.max_ns), 2)});
         }
         return;
     }
     // NULL means to clear the format
-    if (param == null or id != p.SPA_PARAM_Format) return;
+    if (param == null or id != pw.c.SPA_PARAM_Format) return;
 
     log.info("got format:", .{});
-    _ = p.spa_debug_format(2, null, param);
+    _ = pw.c.spa_debug_format(2, null, param);
 
-    if (p.spa_format_parse(param, &data.format.media_type, &data.format.media_subtype) < 0) {
+    if (pw.c.spa_format_parse(param, &data.format.media_type, &data.format.media_subtype) < 0) {
         return;
     }
 
-    if (data.format.media_type != p.SPA_MEDIA_TYPE_video) return;
+    if (data.format.media_type != pw.c.SPA_MEDIA_TYPE_video) return;
 
     const sdl_format, const mult: i32 = switch (data.format.media_subtype) {
-        p.SPA_MEDIA_SUBTYPE_raw => b: {
+        pw.c.SPA_MEDIA_SUBTYPE_raw => b: {
             // call a helper function to parse the format for us.
-            _ = p.spa_format_video_raw_parse(param, &data.format.info.raw);
-            data.size = p.SPA_RECTANGLE(data.format.info.raw.size.width, data.format.info.raw.size.height);
+            _ = pw.c.spa_format_video_raw_parse(param, &data.format.info.raw);
+            data.size = pw.c.SPA_RECTANGLE(data.format.info.raw.size.width, data.format.info.raw.size.height);
             break :b .{ idToSdlFormat(data.format.info.raw.format), 1 };
         },
-        p.SPA_MEDIA_SUBTYPE_dsp => b: {
-            _ = p.spa_format_video_dsp_parse(param, &data.format.info.dsp);
-            if (data.format.info.dsp.format != p.SPA_VIDEO_FORMAT_DSP_F32) return;
-            data.size = p.SPA_RECTANGLE(data.position.?.video.size.width, data.position.?.video.size.height);
+        pw.c.SPA_MEDIA_SUBTYPE_dsp => b: {
+            _ = pw.c.spa_format_video_dsp_parse(param, &data.format.info.dsp);
+            if (data.format.info.dsp.format != pw.c.SPA_VIDEO_FORMAT_DSP_F32) return;
+            data.size = pw.c.SPA_RECTANGLE(data.position.?.video.size.width, data.position.?.video.size.height);
             break :b .{ sdl.SDL_PIXELFORMAT_RGBA32, 4 };
         },
         else => .{ sdl.SDL_PIXELFORMAT_UNKNOWN, 0 },
     };
 
     if (sdl_format == sdl.SDL_PIXELFORMAT_UNKNOWN) {
-        _ = p.pw_stream_set_error(stream, -p.EINVAL, "unknown pixel format");
+        _ = pw.c.pw_stream_set_error(stream, -pw.c.EINVAL, "unknown pixel format");
         return;
     }
     if (data.size.width == 0 or data.size.height == 0) {
-        _ = p.pw_stream_set_error(stream, -p.EINVAL, "invalid size");
+        _ = pw.c.pw_stream_set_error(stream, -pw.c.EINVAL, "invalid size");
         return;
     }
 
@@ -647,106 +512,106 @@ fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const p.spa_p
 
     // a SPA_TYPE_OBJECT_ParamBuffers object defines the acceptable size,
     // number, stride etc of the buffers
-    var params_buf: [5]?*const p.spa_pod = undefined;
-    var params: std.ArrayList(?*const p.spa_pod) = .initBuffer(&params_buf);
-    var f: p.spa_pod_frame = undefined;
+    var params_buf: [5]?*const pw.c.spa_pod = undefined;
+    var params: std.ArrayList(?*const pw.c.spa_pod) = .initBuffer(&params_buf);
+    var f: pw.c.spa_pod_frame = undefined;
 
-    _ = p.spa_pod_builder_push_object(
+    _ = pw.c.spa_pod_builder_push_object(
         &b,
         &f,
-        p.SPA_TYPE_OBJECT_ParamBuffers,
-        p.SPA_PARAM_Buffers,
+        pw.c.SPA_TYPE_OBJECT_ParamBuffers,
+        pw.c.SPA_PARAM_Buffers,
     );
-    _ = p.spa_pod_builder_add(
+    _ = pw.c.spa_pod_builder_add(
         &b,
 
-        p.SPA_PARAM_BUFFERS_buffers,
+        pw.c.SPA_PARAM_BUFFERS_buffers,
         "?ri",
         @as(c_int, 3),
         @as(c_int, 8),
         @as(c_int, 2),
         @as(c_int, max_buffers),
 
-        p.SPA_PARAM_BUFFERS_blocks,
+        pw.c.SPA_PARAM_BUFFERS_blocks,
         "i",
         blocks,
 
-        p.SPA_PARAM_BUFFERS_size,
+        pw.c.SPA_PARAM_BUFFERS_size,
         "i",
         size * mult,
 
-        p.SPA_PARAM_BUFFERS_stride,
+        pw.c.SPA_PARAM_BUFFERS_stride,
         "i",
         data.stride * mult,
 
-        p.SPA_PARAM_BUFFERS_dataType,
+        pw.c.SPA_PARAM_BUFFERS_dataType,
         "?fi",
         @as(c_int, 1),
-        @as(c_int, 1 << p.SPA_DATA_MemPtr),
+        @as(c_int, 1 << pw.c.SPA_DATA_MemPtr),
 
         @as(c_int, 0),
     );
-    params.appendBounded(@ptrCast(@alignCast(p.spa_pod_builder_pop(&b, &f)))) catch @panic("OOB");
+    params.appendBounded(@ptrCast(@alignCast(pw.c.spa_pod_builder_pop(&b, &f)))) catch @panic("OOB");
 
     // a header metadata with timing information
-    _ = p.spa_pod_builder_push_object(
+    _ = pw.c.spa_pod_builder_push_object(
         &b,
         &f,
-        p.SPA_TYPE_OBJECT_ParamMeta,
-        p.SPA_PARAM_Meta,
+        pw.c.SPA_TYPE_OBJECT_ParamMeta,
+        pw.c.SPA_PARAM_Meta,
     );
-    _ = p.spa_pod_builder_add(
+    _ = pw.c.spa_pod_builder_add(
         &b,
 
-        p.SPA_PARAM_META_type,
+        pw.c.SPA_PARAM_META_type,
         "I",
-        p.SPA_META_Header,
+        pw.c.SPA_META_Header,
 
-        p.SPA_PARAM_META_size,
+        pw.c.SPA_PARAM_META_size,
         "i",
-        @as(usize, @sizeOf(p.spa_meta_header)),
+        @as(usize, @sizeOf(pw.c.spa_meta_header)),
 
         @as(c_int, 0),
     );
-    params.appendBounded(@ptrCast(@alignCast(p.spa_pod_builder_pop(&b, &f)))) catch @panic("OOB");
+    params.appendBounded(@ptrCast(@alignCast(pw.c.spa_pod_builder_pop(&b, &f)))) catch @panic("OOB");
 
     // video cropping information
-    _ = p.spa_pod_builder_push_object(
+    _ = pw.c.spa_pod_builder_push_object(
         &b,
         &f,
-        p.SPA_TYPE_OBJECT_ParamMeta,
-        p.SPA_PARAM_Meta,
+        pw.c.SPA_TYPE_OBJECT_ParamMeta,
+        pw.c.SPA_PARAM_Meta,
     );
-    _ = p.spa_pod_builder_add(
+    _ = pw.c.spa_pod_builder_add(
         &b,
 
-        p.SPA_PARAM_META_type,
+        pw.c.SPA_PARAM_META_type,
         "I",
-        p.SPA_META_VideoCrop,
+        pw.c.SPA_META_VideoCrop,
 
-        p.SPA_PARAM_META_size,
+        pw.c.SPA_PARAM_META_size,
         "i",
-        @as(usize, @sizeOf(p.spa_meta_region)),
+        @as(usize, @sizeOf(pw.c.spa_meta_region)),
 
         @as(c_int, 0),
     );
-    params.appendBounded(@ptrCast(@alignCast(p.spa_pod_builder_pop(&b, &f)))) catch @panic("OOB");
+    params.appendBounded(@ptrCast(@alignCast(pw.c.spa_pod_builder_pop(&b, &f)))) catch @panic("OOB");
 
     // cursor information
-    _ = p.spa_pod_builder_push_object(
+    _ = pw.c.spa_pod_builder_push_object(
         &b,
         &f,
-        p.SPA_TYPE_OBJECT_ParamMeta,
-        p.SPA_PARAM_Meta,
+        pw.c.SPA_TYPE_OBJECT_ParamMeta,
+        pw.c.SPA_PARAM_Meta,
     );
-    _ = p.spa_pod_builder_add(
+    _ = pw.c.spa_pod_builder_add(
         &b,
 
-        p.SPA_PARAM_META_type,
+        pw.c.SPA_PARAM_META_type,
         "I",
-        p.SPA_META_Cursor,
+        pw.c.SPA_META_Cursor,
 
-        p.SPA_PARAM_META_size,
+        pw.c.SPA_PARAM_META_size,
         "?ri",
         @as(c_int, 3),
         cursorMetaSize(64, 64),
@@ -755,46 +620,46 @@ fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const p.spa_p
 
         @as(c_int, 0),
     );
-    params.appendBounded(@ptrCast(@alignCast(p.spa_pod_builder_pop(&b, &f)))) catch @panic("OOB");
+    params.appendBounded(@ptrCast(@alignCast(pw.c.spa_pod_builder_pop(&b, &f)))) catch @panic("OOB");
 
     // we are done
-    _ = p.pw_stream_update_params(stream, params.items.ptr, @intCast(params.items.len));
+    _ = pw.c.pw_stream_update_params(stream, params.items.ptr, @intCast(params.items.len));
 }
 
 fn cursorMetaSize(w: usize, h: usize) usize {
-    return @sizeOf(p.spa_meta_cursor) + @sizeOf(p.spa_meta_bitmap) + w * h * 4;
+    return @sizeOf(pw.c.spa_meta_cursor) + @sizeOf(pw.c.spa_meta_bitmap) + w * h * 4;
 }
 
-fn buildFormat(data: *Data, b: *p.spa_pod_builder, params: *std.ArrayList(?*const p.spa_pod)) void {
+fn buildFormat(data: *Data, b: *pw.c.spa_pod_builder, params: *std.ArrayList(?*const pw.c.spa_pod)) void {
     {
         const format = sdlBuildFormats(data.renderer.?, b);
         log.info("supported SDL formats:", .{});
-        _ = p.spa_debug_format(2, null, format);
+        _ = pw.c.spa_debug_format(2, null, format);
         params.appendBounded(format) catch @panic("OOB");
     }
 
     {
-        var f: p.spa_pod_frame = undefined;
-        _ = p.spa_pod_builder_push_object(b, &f, p.SPA_TYPE_OBJECT_Format, p.SPA_PARAM_EnumFormat);
-        _ = p.spa_pod_builder_add(
+        var f: pw.c.spa_pod_frame = undefined;
+        _ = pw.c.spa_pod_builder_push_object(b, &f, pw.c.SPA_TYPE_OBJECT_Format, pw.c.SPA_PARAM_EnumFormat);
+        _ = pw.c.spa_pod_builder_add(
             b,
-            p.SPA_FORMAT_mediaType,
+            pw.c.SPA_FORMAT_mediaType,
             "I",
-            p.SPA_MEDIA_TYPE_video,
+            pw.c.SPA_MEDIA_TYPE_video,
 
-            p.SPA_FORMAT_mediaSubtype,
+            pw.c.SPA_FORMAT_mediaSubtype,
             "I",
-            p.SPA_MEDIA_SUBTYPE_dsp,
+            pw.c.SPA_MEDIA_SUBTYPE_dsp,
 
-            p.SPA_FORMAT_VIDEO_format,
+            pw.c.SPA_FORMAT_VIDEO_format,
 
             "I",
-            p.SPA_VIDEO_FORMAT_DSP_F32,
+            pw.c.SPA_VIDEO_FORMAT_DSP_F32,
 
             @as(c_int, 0),
         );
-        const format: *const p.spa_pod = @ptrCast(@alignCast(p.spa_pod_builder_pop(b, &f)));
-        _ = p.spa_debug_format(2, null, format);
+        const format: *const pw.c.spa_pod = @ptrCast(@alignCast(pw.c.spa_pod_builder_pop(b, &f)));
+        _ = pw.c.spa_debug_format(2, null, format);
         params.appendBounded(format) catch @panic("OOB");
     }
 }
@@ -805,46 +670,46 @@ const FormatPair = struct {
 };
 
 const sdl_video_formats = [_]FormatPair{
-    .{ .format = sdl.SDL_PIXELFORMAT_UNKNOWN, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_INDEX1LSB, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_UNKNOWN, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_INDEX1LSB, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_INDEX1MSB, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_INDEX4LSB, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_INDEX4MSB, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_INDEX8, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_RGB332, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_XRGB4444, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_XRGB1555, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_XBGR1555, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_ARGB4444, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_RGBA4444, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_ABGR4444, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_BGRA4444, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_ARGB1555, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_RGBA5551, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_ABGR1555, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_BGRA5551, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_RGB565, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_BGR565, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_RGB24, .id = p.SPA_VIDEO_FORMAT_BGR },
-    .{ .format = sdl.SDL_PIXELFORMAT_XRGB8888, .id = p.SPA_VIDEO_FORMAT_BGR },
-    .{ .format = sdl.SDL_PIXELFORMAT_RGBX8888, .id = p.SPA_VIDEO_FORMAT_xBGR },
-    .{ .format = sdl.SDL_PIXELFORMAT_BGR24, .id = p.SPA_VIDEO_FORMAT_RGB },
-    .{ .format = sdl.SDL_PIXELFORMAT_XBGR8888, .id = p.SPA_VIDEO_FORMAT_RGB },
-    .{ .format = sdl.SDL_PIXELFORMAT_BGRX8888, .id = p.SPA_VIDEO_FORMAT_xRGB },
-    .{ .format = sdl.SDL_PIXELFORMAT_ARGB2101010, .id = p.SPA_VIDEO_FORMAT_UNKNOWN },
-    .{ .format = sdl.SDL_PIXELFORMAT_RGBA8888, .id = p.SPA_VIDEO_FORMAT_ABGR },
-    .{ .format = sdl.SDL_PIXELFORMAT_ARGB8888, .id = p.SPA_VIDEO_FORMAT_BGRA },
-    .{ .format = sdl.SDL_PIXELFORMAT_BGRA8888, .id = p.SPA_VIDEO_FORMAT_ARGB },
-    .{ .format = sdl.SDL_PIXELFORMAT_ABGR8888, .id = p.SPA_VIDEO_FORMAT_RGBA },
-    .{ .format = sdl.SDL_PIXELFORMAT_YV12, .id = p.SPA_VIDEO_FORMAT_YV12 },
-    .{ .format = sdl.SDL_PIXELFORMAT_IYUV, .id = p.SPA_VIDEO_FORMAT_I420 },
-    .{ .format = sdl.SDL_PIXELFORMAT_YUY2, .id = p.SPA_VIDEO_FORMAT_YUY2 },
-    .{ .format = sdl.SDL_PIXELFORMAT_UYVY, .id = p.SPA_VIDEO_FORMAT_UYVY },
-    .{ .format = sdl.SDL_PIXELFORMAT_YVYU, .id = p.SPA_VIDEO_FORMAT_YVYU },
-    .{ .format = sdl.SDL_PIXELFORMAT_NV12, .id = p.SPA_VIDEO_FORMAT_NV12 },
-    .{ .format = sdl.SDL_PIXELFORMAT_NV21, .id = p.SPA_VIDEO_FORMAT_NV21 },
+    .{ .format = sdl.SDL_PIXELFORMAT_UNKNOWN, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_INDEX1LSB, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_UNKNOWN, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_INDEX1LSB, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_INDEX1MSB, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_INDEX4LSB, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_INDEX4MSB, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_INDEX8, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_RGB332, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_XRGB4444, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_XRGB1555, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_XBGR1555, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_ARGB4444, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_RGBA4444, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_ABGR4444, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_BGRA4444, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_ARGB1555, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_RGBA5551, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_ABGR1555, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_BGRA5551, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_RGB565, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_BGR565, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_RGB24, .id = pw.c.SPA_VIDEO_FORMAT_BGR },
+    .{ .format = sdl.SDL_PIXELFORMAT_XRGB8888, .id = pw.c.SPA_VIDEO_FORMAT_BGR },
+    .{ .format = sdl.SDL_PIXELFORMAT_RGBX8888, .id = pw.c.SPA_VIDEO_FORMAT_xBGR },
+    .{ .format = sdl.SDL_PIXELFORMAT_BGR24, .id = pw.c.SPA_VIDEO_FORMAT_RGB },
+    .{ .format = sdl.SDL_PIXELFORMAT_XBGR8888, .id = pw.c.SPA_VIDEO_FORMAT_RGB },
+    .{ .format = sdl.SDL_PIXELFORMAT_BGRX8888, .id = pw.c.SPA_VIDEO_FORMAT_xRGB },
+    .{ .format = sdl.SDL_PIXELFORMAT_ARGB2101010, .id = pw.c.SPA_VIDEO_FORMAT_UNKNOWN },
+    .{ .format = sdl.SDL_PIXELFORMAT_RGBA8888, .id = pw.c.SPA_VIDEO_FORMAT_ABGR },
+    .{ .format = sdl.SDL_PIXELFORMAT_ARGB8888, .id = pw.c.SPA_VIDEO_FORMAT_BGRA },
+    .{ .format = sdl.SDL_PIXELFORMAT_BGRA8888, .id = pw.c.SPA_VIDEO_FORMAT_ARGB },
+    .{ .format = sdl.SDL_PIXELFORMAT_ABGR8888, .id = pw.c.SPA_VIDEO_FORMAT_RGBA },
+    .{ .format = sdl.SDL_PIXELFORMAT_YV12, .id = pw.c.SPA_VIDEO_FORMAT_YV12 },
+    .{ .format = sdl.SDL_PIXELFORMAT_IYUV, .id = pw.c.SPA_VIDEO_FORMAT_I420 },
+    .{ .format = sdl.SDL_PIXELFORMAT_YUY2, .id = pw.c.SPA_VIDEO_FORMAT_YUY2 },
+    .{ .format = sdl.SDL_PIXELFORMAT_UYVY, .id = pw.c.SPA_VIDEO_FORMAT_UYVY },
+    .{ .format = sdl.SDL_PIXELFORMAT_YVYU, .id = pw.c.SPA_VIDEO_FORMAT_YVYU },
+    .{ .format = sdl.SDL_PIXELFORMAT_NV12, .id = pw.c.SPA_VIDEO_FORMAT_NV12 },
+    .{ .format = sdl.SDL_PIXELFORMAT_NV21, .id = pw.c.SPA_VIDEO_FORMAT_NV21 },
 };
 
 fn sdlFormatToId(format: u32) u32 {
@@ -853,7 +718,7 @@ fn sdlFormatToId(format: u32) u32 {
             return f.id;
         }
     }
-    return p.SPA_VIDEO_FORMAT_UNKNOWN;
+    return pw.c.SPA_VIDEO_FORMAT_UNKNOWN;
 }
 
 fn idToSdlFormat(id: u32) u32 {
@@ -865,22 +730,22 @@ fn idToSdlFormat(id: u32) u32 {
     return sdl.SDL_PIXELFORMAT_UNKNOWN;
 }
 
-fn sdlBuildFormats(renderer: *sdl.SDL_Renderer, b: *p.spa_pod_builder) *p.spa_pod {
-    var f: [2]p.spa_pod_frame = undefined;
+fn sdlBuildFormats(renderer: *sdl.SDL_Renderer, b: *pw.c.spa_pod_builder) *pw.c.spa_pod {
+    var f: [2]pw.c.spa_pod_frame = undefined;
 
     // make an object of type SPA_TYPE_OBJECT_Format and id SPA_PARAM_EnumFormat. The object type is
     // important because it defines the properties that are acceptable. The id gives more context
     // about what the object is meant to contain. In this case we enumerate supported formats.
-    _ = p.spa_pod_builder_push_object(b, &f[0], p.SPA_TYPE_OBJECT_Format, p.SPA_PARAM_EnumFormat);
+    _ = pw.c.spa_pod_builder_push_object(b, &f[0], pw.c.SPA_TYPE_OBJECT_Format, pw.c.SPA_PARAM_EnumFormat);
     // add media type and media subtype properties
-    _ = p.spa_pod_builder_prop(b, p.SPA_FORMAT_mediaType, 0);
-    _ = p.spa_pod_builder_id(b, p.SPA_MEDIA_TYPE_video);
-    _ = p.spa_pod_builder_prop(b, p.SPA_FORMAT_mediaSubtype, 0);
-    _ = p.spa_pod_builder_id(b, p.SPA_MEDIA_SUBTYPE_raw);
+    _ = pw.c.spa_pod_builder_prop(b, pw.c.SPA_FORMAT_mediaType, 0);
+    _ = pw.c.spa_pod_builder_id(b, pw.c.SPA_MEDIA_TYPE_video);
+    _ = pw.c.spa_pod_builder_prop(b, pw.c.SPA_FORMAT_mediaSubtype, 0);
+    _ = pw.c.spa_pod_builder_id(b, pw.c.SPA_MEDIA_SUBTYPE_raw);
 
     // build an enumeration of formats
-    _ = p.spa_pod_builder_prop(b, p.SPA_FORMAT_VIDEO_format, 0);
-    _ = p.spa_pod_builder_push_choice(b, &f[1], p.SPA_CHOICE_Enum, 0);
+    _ = pw.c.spa_pod_builder_prop(b, pw.c.SPA_FORMAT_VIDEO_format, 0);
+    _ = pw.c.spa_pod_builder_push_choice(b, &f[1], pw.c.SPA_CHOICE_Enum, 0);
 
     const props: sdl.SDL_PropertiesID = sdl.SDL_GetRendererProperties(renderer);
 
@@ -896,40 +761,40 @@ fn sdlBuildFormats(renderer: *sdl.SDL_Renderer, b: *p.spa_pod_builder) *p.spa_po
     while (texture_formats[i] != sdl.SDL_PIXELFORMAT_UNKNOWN) : (i += 1) {
         const id: u32 = sdlFormatToId(texture_formats[i]);
         if (id == 0) continue;
-        if (ci == 0) _ = p.spa_pod_builder_id(b, p.SPA_VIDEO_FORMAT_UNKNOWN);
+        if (ci == 0) _ = pw.c.spa_pod_builder_id(b, pw.c.SPA_VIDEO_FORMAT_UNKNOWN);
         ci += 1;
-        _ = p.spa_pod_builder_id(b, id);
+        _ = pw.c.spa_pod_builder_id(b, id);
     }
     // then all the other ones SDL can convert from/to
     for (sdl_video_formats) |format| {
         const id: u32 = format.id;
-        if (id != p.SPA_VIDEO_FORMAT_UNKNOWN) {
-            _ = p.spa_pod_builder_id(b, id);
+        if (id != pw.c.SPA_VIDEO_FORMAT_UNKNOWN) {
+            _ = pw.c.spa_pod_builder_id(b, id);
         }
     }
-    _ = p.spa_pod_builder_id(b, p.SPA_VIDEO_FORMAT_RGBA_F32);
-    _ = p.spa_pod_builder_pop(b, &f[1]);
+    _ = pw.c.spa_pod_builder_id(b, pw.c.SPA_VIDEO_FORMAT_RGBA_F32);
+    _ = pw.c.spa_pod_builder_pop(b, &f[1]);
     // add size and framerate ranges
     const max_texture_size: u32 = @intCast(sdl.SDL_GetNumberProperty(
         props,
         sdl.SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER,
         0,
     ));
-    _ = p.spa_pod_builder_add(
+    _ = pw.c.spa_pod_builder_add(
         b,
-        p.SPA_FORMAT_VIDEO_size,
-        p.SPA_POD_CHOICE_RANGE_Rectangle(
-            &p.SPA_RECTANGLE(width, height),
-            &p.SPA_RECTANGLE(1, 1),
-            &p.SPA_RECTANGLE(max_texture_size, max_texture_size),
+        pw.c.SPA_FORMAT_VIDEO_size,
+        pw.c.SPA_POD_CHOICE_RANGE_Rectangle(
+            &pw.c.SPA_RECTANGLE(width, height),
+            &pw.c.SPA_RECTANGLE(1, 1),
+            &pw.c.SPA_RECTANGLE(max_texture_size, max_texture_size),
         ),
-        p.SPA_FORMAT_VIDEO_framerate,
-        p.SPA_POD_CHOICE_RANGE_Fraction(
-            &p.SPA_FRACTION(rate, 1),
-            &p.SPA_FRACTION(0, 1),
-            &p.SPA_FRACTION(30, 1),
+        pw.c.SPA_FORMAT_VIDEO_framerate,
+        pw.c.SPA_POD_CHOICE_RANGE_Fraction(
+            &pw.c.SPA_FRACTION(rate, 1),
+            &pw.c.SPA_FRACTION(0, 1),
+            &pw.c.SPA_FRACTION(30, 1),
         ),
         @as(c_int, 0),
     );
-    return @ptrCast(@alignCast(p.spa_pod_builder_pop(b, &f[0])));
+    return @ptrCast(@alignCast(pw.c.spa_pod_builder_pop(b, &f[0])));
 }
