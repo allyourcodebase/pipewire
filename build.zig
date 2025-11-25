@@ -376,8 +376,16 @@ const flags: []const []const u8 = &.{
     "-Dmmap=__wrap_mmap",
     "-Dmunmap=__wrap_munmap",
 
+    // If we're using glibc, it aliases `open` in the header as part of extra checks on the variadic
+    // args. Since this is done in the header, and libc is likely linked first, our defines will
+    // apply to the definition as well and it will get called instead of our wrapper. To fix this,
+    // we just wrap the aliases as well.
+    "-D__open_2=__wrap_open_2",
+    "-D__open_alias=__wrap___open_alias",
+
     // Since `spa_autoclose` points to a function defined in a header, its close doesn't get
     // wrapped. Wrap it manually.
+    "-Dspa_autoclose=__attribute__((__cleanup__(__wrap_close)))",
     "-Dspa_autoclose=__attribute__((__cleanup__(__wrap_close)))",
 };
 
@@ -408,6 +416,7 @@ pub const PipewireModule = struct {
                 .target = ctx.target,
                 .optimize = ctx.optimize,
                 .link_libc = true,
+                .sanitize_c = .off, // https://github.com/allyourcodebase/pipewire/issues/3
             }),
         });
         lib.addCSourceFiles(.{

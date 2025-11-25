@@ -90,6 +90,11 @@ pub export fn __wrap_open(path_c: [*:0]const u8, flags: std.c.O, ...) callconv(.
     return result;
 }
 
+/// glibc aliases open to check the variadic args.
+pub export const __wrap_open_2 = __wrap_open;
+/// glibc aliases open to check the variadic args.
+pub export const __wrap___open_alias = __wrap_open;
+
 /// If we're closing a config file, reset `maybe_client_config_fd`.
 pub export fn __wrap_close(fd: std.c.fd_t) callconv(.c) c_int {
     if (maybe_client_config_fd == fd) maybe_client_config_fd = null;
