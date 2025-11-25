@@ -28,74 +28,154 @@ pub const std_options: std.Options = .{
 };
 
 // XXX: expose this from the library so other people don't have to recreate it
-const pw_log_scope = .pw;
-fn pwLog(
-    object: ?*anyopaque,
-    level: p.spa_log_level,
-    file: [*c]const u8,
-    line: c_int,
-    func: [*c]const u8,
-    fmt: [*c]const u8,
-    ...,
-) callconv(.c) void {
-    pwLogtv(object, level, null, file, line, func, fmt);
-}
-
-fn pwLogtv(
-    object: ?*anyopaque,
-    pw_level: p.spa_log_level,
-    topic: ?*const p.spa_log_topic,
-    file_abs_c: [*c]const u8,
-    line: c_int,
-    func: [*c]const u8,
-    fmt: [*c]const u8,
-    ...,
-) callconv(.c) void {
-    const level: std.log.Level = switch (pw_level) {
-        p.SPA_LOG_LEVEL_NONE => return,
-        p.SPA_LOG_LEVEL_ERROR => .err,
-        p.SPA_LOG_LEVEL_WARN => .warn,
-        p.SPA_LOG_LEVEL_INFO => .info,
-        p.SPA_LOG_LEVEL_DEBUG, p.SPA_LOG_LEVEL_TRACE => .debug,
-        else => .err,
-    };
-    const file = b: {
-        const file_abs = std.mem.span(file_abs_c);
-        const i = std.mem.lastIndexOfAny(u8, file_abs, "\\/") orelse break :b file_abs;
-        break :b file_abs[i + 1 ..];
-    };
-    switch (level) {
-        inline else => |l| {
-            if (!std.log.logEnabled(l, pw_log_scope)) return;
-            // XXX: use c to actually do the formatting into a buf then print here so we can handle
-            // the varargs
-            std.options.logFn(l, pw_log_scope, "{s}:{}: {s}: {s}", .{ file, line, func, fmt });
-        },
-    }
-    // XXX: display these
-    _ = topic;
-    _ = object;
-}
-
-pub fn main() !void {
-    p.pw_init(0, null);
-    defer p.pw_deinit();
-
-    p.pw_log_set_level(switch (std.options.log_level) {
+const Logger = struct {
+    const default_level = switch (std.options.log_level) {
         .err => p.SPA_LOG_LEVEL_ERROR,
         .warn => p.SPA_LOG_LEVEL_WARN,
         .info => p.SPA_LOG_LEVEL_INFO,
         .debug => p.SPA_LOG_LEVEL_TRACE,
-    });
-    const logger = &p.pw_log_get()[0];
-    // XXX: make sure this const cast is okay--just verify it was originally mutable
-    const funcs: *p.spa_log_methods = @ptrCast(@alignCast(@constCast(logger.iface.cb.funcs.?)));
-    // XXX: do the first three really all take the same args? what's the difference between them?
-    funcs.log = @ptrCast(&pwLog);
-    funcs.logv = @ptrCast(&pwLog);
-    funcs.logt = @ptrCast(&pwLog);
-    funcs.logtv = @ptrCast(&pwLogtv);
-    p.pw_log_set(logger);
+    };
+    const scope = .pw;
+
+    pub fn init() p.spa_log {
+        return .{
+            .iface = .{
+                .type = p.SPA_TYPE_INTERFACE_Log,
+                .version = p.SPA_VERSION_LOG,
+                .cb = .{
+                    .funcs = &p.spa_log_methods{
+                        .version = p.SPA_VERSION_LOG_METHODS,
+                        .log = &Methods.log,
+                        .logt = &Methods.logt,
+                        // We have to pointer cast these due to the way the variadic argument list
+                        // is translated.
+                        .logv = @ptrCast(&Methods.logv),
+                        .logtv = @ptrCast(&Methods.logtv),
+                        .topic_init = &Methods.topicInit,
+                    },
+                    // Appears to be unused, likely intended as userdata
+                    .data = null,
+                },
+            },
+            .level = default_level,
+        };
+    }
+
+    const Methods = struct {
+        fn log(
+            object: ?*anyopaque,
+            pw_level: p.spa_log_level,
+            file_abs_c: [*c]const u8,
+            line: c_int,
+            func: [*c]const u8,
+            fmt: [*c]const u8,
+            ...,
+        ) callconv(.c) void {
+            var args = @cVaStart();
+            defer @cVaEnd(&args);
+            logtv(object, pw_level, null, file_abs_c, line, func, fmt, &args);
+        }
+
+        fn logv(
+            object: ?*anyopaque,
+            pw_level: p.spa_log_level,
+            file_abs_c: [*c]const u8,
+            line: c_int,
+            func: [*c]const u8,
+            fmt: [*c]const u8,
+            args: ?*std.builtin.VaList,
+        ) callconv(.c) void {
+            logtv(object, pw_level, null, file_abs_c, line, func, fmt, args);
+        }
+
+        fn logt(
+            object: ?*anyopaque,
+            pw_level: p.spa_log_level,
+            topic: ?*const p.spa_log_topic,
+            file_abs_c: [*c]const u8,
+            line: c_int,
+            func: [*c]const u8,
+            fmt: [*c]const u8,
+            ...,
+        ) callconv(.c) void {
+            var args = @cVaStart();
+            defer @cVaEnd(&args);
+            logtv(object, pw_level, topic, file_abs_c, line, func, fmt, &args);
+        }
+
+        fn logtv(
+            object: ?*anyopaque,
+            pw_level: p.spa_log_level,
+            topic: ?*const p.spa_log_topic,
+            file_abs_c: [*c]const u8,
+            line: c_int,
+            func: [*c]const u8,
+            fmt: [*c]const u8,
+            args: ?*std.builtin.VaList,
+        ) callconv(.c) void {
+            // Object seems to be ignored by default logger. I believe the messages include it in
+            // the formatted string when relevant.
+            _ = object;
+            // Topics are not useful in practice, they're often redundant with filename and message
+            // content, and we've already uniquely identified the log by file and line number. They
+            // are likely present for topic based filtering which we don't support anyway.
+            _ = topic;
+            // Function names add a lot of noise to the log, and this information can be deduced
+            // from the file name and line number, so we skip it.
+            _ = func;
+
+            // Convert to Zig log levels.
+            const level: std.log.Level = switch (pw_level) {
+                p.SPA_LOG_LEVEL_NONE => return,
+                p.SPA_LOG_LEVEL_ERROR => .err,
+                p.SPA_LOG_LEVEL_WARN => .warn,
+                p.SPA_LOG_LEVEL_INFO => .info,
+                p.SPA_LOG_LEVEL_DEBUG, p.SPA_LOG_LEVEL_TRACE => .debug,
+                else => .err,
+            };
+
+            // We don't want to log absolute file paths. That's overly verbose, and exposes more
+            // information to logs than is likely intended.
+            const file = b: {
+                const file_abs = std.mem.span(file_abs_c);
+                const i = std.mem.lastIndexOfAny(u8, file_abs, "\\/") orelse break :b file_abs;
+                break :b file_abs[i + 1 ..];
+            };
+
+            // Perform the log. We use an inline else to make the level comptime known.
+            switch (level) {
+                inline else => |l| {
+                    if (!std.log.logEnabled(l, scope)) return;
+                    var buf: [1024]u8 = undefined;
+                    const formatted = b: {
+                        const max_len = p.spa_vscnprintf(&buf, buf.len, fmt, @ptrCast(args));
+                        if (max_len < 0) break :b "(formatting failed)";
+                        break :b buf[0..@min(buf.len - 1, @as(usize, @intCast(max_len)))];
+                    };
+                    std.options.logFn(l, scope, "{s}:{}: {s}", .{
+                        file,
+                        line,
+                        formatted,
+                    });
+                },
+            }
+        }
+
+        fn topicInit(object: ?*anyopaque, topic: ?*p.spa_log_topic) callconv(.c) void {
+            // Noop in default implementation as well
+            _ = object;
+            _ = topic;
+        }
+    };
+};
+
+pub fn main() !void {
+    var zlog = Logger.init();
+    p.pw_log_set(&zlog);
+    p.pw_log_set_level(Logger.default_level);
+
+    p.pw_init(0, null);
+    defer p.pw_deinit();
 
     var data: Data = .{};
 
