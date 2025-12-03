@@ -54,3 +54,9 @@ defer pw.pw_deinit();
 ```
 
 See [`src/examples`](`src/examples`) for more information.
+
+### Help, I'm getting undefined symbols!
+
+If you import the Pipewire zig module but don't reference it, the import won't get evaluated and the wrapper functions won't get exported.
+
+To resolve this, use something from the pipewire module, or declare `comptime { _ = @import("pipewire"); }` to force evaluation.

@@ -1,10 +1,11 @@
-// `pipewire/src/examples/video-play.c` translated to Zig.
+//! `pipewire/src/examples/video-play.c` translated to Zig.
 
 const std = @import("std");
 const log = std.log;
 const example_options = @import("example_options");
 
-// Normal code wouldn't do this, this
+// Normal code wouldn't need this conditional, we're just demonstrating both the static library and
+// the Zig module here. Prefer the Zig module when possible.
 const pw = if (example_options.use_zig_module)
     // Example of linking with the pipewire zig module
     @import("pipewire")
