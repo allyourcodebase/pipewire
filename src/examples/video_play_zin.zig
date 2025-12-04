@@ -99,24 +99,94 @@ const Data = struct {
 var data: Data = .{};
 
 const formats: []const pw.c.spa_video_format = &.{
-    // XXX: ... this vs xrgb??
-    pw.c.SPA_VIDEO_FORMAT_RGBx,
-    // XXX: ...
-    pw.c.SPA_VIDEO_FORMAT_BGR,
-    pw.c.SPA_VIDEO_FORMAT_xBGR,
-    pw.c.SPA_VIDEO_FORMAT_RGB,
-    pw.c.SPA_VIDEO_FORMAT_xRGB,
-    pw.c.SPA_VIDEO_FORMAT_ABGR,
-    pw.c.SPA_VIDEO_FORMAT_BGRA,
-    pw.c.SPA_VIDEO_FORMAT_ARGB,
-    pw.c.SPA_VIDEO_FORMAT_RGBA,
-    pw.c.SPA_VIDEO_FORMAT_YV12,
+    pw.c.SPA_VIDEO_FORMAT_ENCODED,
     pw.c.SPA_VIDEO_FORMAT_I420,
+    pw.c.SPA_VIDEO_FORMAT_YV12,
     pw.c.SPA_VIDEO_FORMAT_YUY2,
     pw.c.SPA_VIDEO_FORMAT_UYVY,
+    pw.c.SPA_VIDEO_FORMAT_AYUV,
+    pw.c.SPA_VIDEO_FORMAT_RGBx,
+    pw.c.SPA_VIDEO_FORMAT_BGRx,
+    pw.c.SPA_VIDEO_FORMAT_xRGB,
+    pw.c.SPA_VIDEO_FORMAT_xBGR,
+    pw.c.SPA_VIDEO_FORMAT_RGBA,
+    pw.c.SPA_VIDEO_FORMAT_BGRA,
+    pw.c.SPA_VIDEO_FORMAT_ARGB,
+    pw.c.SPA_VIDEO_FORMAT_ABGR,
+    pw.c.SPA_VIDEO_FORMAT_RGB,
+    pw.c.SPA_VIDEO_FORMAT_BGR,
+    pw.c.SPA_VIDEO_FORMAT_Y41B,
+    pw.c.SPA_VIDEO_FORMAT_Y42B,
     pw.c.SPA_VIDEO_FORMAT_YVYU,
+    pw.c.SPA_VIDEO_FORMAT_Y444,
+    pw.c.SPA_VIDEO_FORMAT_v210,
+    pw.c.SPA_VIDEO_FORMAT_v216,
     pw.c.SPA_VIDEO_FORMAT_NV12,
     pw.c.SPA_VIDEO_FORMAT_NV21,
+    pw.c.SPA_VIDEO_FORMAT_GRAY8,
+    pw.c.SPA_VIDEO_FORMAT_GRAY16_BE,
+    pw.c.SPA_VIDEO_FORMAT_GRAY16_LE,
+    pw.c.SPA_VIDEO_FORMAT_v308,
+    pw.c.SPA_VIDEO_FORMAT_RGB16,
+    pw.c.SPA_VIDEO_FORMAT_BGR16,
+    pw.c.SPA_VIDEO_FORMAT_RGB15,
+    pw.c.SPA_VIDEO_FORMAT_BGR15,
+    pw.c.SPA_VIDEO_FORMAT_UYVP,
+    pw.c.SPA_VIDEO_FORMAT_A420,
+    pw.c.SPA_VIDEO_FORMAT_RGB8P,
+    pw.c.SPA_VIDEO_FORMAT_YUV9,
+    pw.c.SPA_VIDEO_FORMAT_YVU9,
+    pw.c.SPA_VIDEO_FORMAT_IYU1,
+    pw.c.SPA_VIDEO_FORMAT_ARGB64,
+    pw.c.SPA_VIDEO_FORMAT_AYUV64,
+    pw.c.SPA_VIDEO_FORMAT_r210,
+    pw.c.SPA_VIDEO_FORMAT_I420_10BE,
+    pw.c.SPA_VIDEO_FORMAT_I420_10LE,
+    pw.c.SPA_VIDEO_FORMAT_I422_10BE,
+    pw.c.SPA_VIDEO_FORMAT_I422_10LE,
+    pw.c.SPA_VIDEO_FORMAT_Y444_10BE,
+    pw.c.SPA_VIDEO_FORMAT_Y444_10LE,
+    pw.c.SPA_VIDEO_FORMAT_GBR,
+    pw.c.SPA_VIDEO_FORMAT_GBR_10BE,
+    pw.c.SPA_VIDEO_FORMAT_GBR_10LE,
+    pw.c.SPA_VIDEO_FORMAT_NV16,
+    pw.c.SPA_VIDEO_FORMAT_NV24,
+    pw.c.SPA_VIDEO_FORMAT_NV12_64Z32,
+    pw.c.SPA_VIDEO_FORMAT_A420_10BE,
+    pw.c.SPA_VIDEO_FORMAT_A420_10LE,
+    pw.c.SPA_VIDEO_FORMAT_A422_10BE,
+    pw.c.SPA_VIDEO_FORMAT_A422_10LE,
+    pw.c.SPA_VIDEO_FORMAT_A444_10BE,
+    pw.c.SPA_VIDEO_FORMAT_A444_10LE,
+    pw.c.SPA_VIDEO_FORMAT_NV61,
+    pw.c.SPA_VIDEO_FORMAT_P010_10BE,
+    pw.c.SPA_VIDEO_FORMAT_P010_10LE,
+    pw.c.SPA_VIDEO_FORMAT_IYU2,
+    pw.c.SPA_VIDEO_FORMAT_VYUY,
+    pw.c.SPA_VIDEO_FORMAT_GBRA,
+    pw.c.SPA_VIDEO_FORMAT_GBRA_10BE,
+    pw.c.SPA_VIDEO_FORMAT_GBRA_10LE,
+    pw.c.SPA_VIDEO_FORMAT_GBR_12BE,
+    pw.c.SPA_VIDEO_FORMAT_GBR_12LE,
+    pw.c.SPA_VIDEO_FORMAT_GBRA_12BE,
+    pw.c.SPA_VIDEO_FORMAT_GBRA_12LE,
+    pw.c.SPA_VIDEO_FORMAT_I420_12BE,
+    pw.c.SPA_VIDEO_FORMAT_I420_12LE,
+    pw.c.SPA_VIDEO_FORMAT_I422_12BE,
+    pw.c.SPA_VIDEO_FORMAT_I422_12LE,
+    pw.c.SPA_VIDEO_FORMAT_Y444_12BE,
+    pw.c.SPA_VIDEO_FORMAT_Y444_12LE,
+    pw.c.SPA_VIDEO_FORMAT_RGBA_F16,
+    pw.c.SPA_VIDEO_FORMAT_RGBA_F32,
+    pw.c.SPA_VIDEO_FORMAT_xRGB_210LE,
+    pw.c.SPA_VIDEO_FORMAT_xBGR_210LE,
+    pw.c.SPA_VIDEO_FORMAT_RGBx_102LE,
+    pw.c.SPA_VIDEO_FORMAT_BGRx_102LE,
+    pw.c.SPA_VIDEO_FORMAT_ARGB_210LE,
+    pw.c.SPA_VIDEO_FORMAT_ABGR_210LE,
+    pw.c.SPA_VIDEO_FORMAT_RGBA_102LE,
+    pw.c.SPA_VIDEO_FORMAT_BGRA_102LE,
+    pw.c.SPA_VIDEO_FORMAT_DSP_F32,
 };
 
 pub fn main() !void {
@@ -207,7 +277,6 @@ pub fn main() !void {
                 var choice_frame: pw.c.spa_pod_frame = undefined;
                 check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_VIDEO_format, 0));
                 check(pw.c.spa_pod_builder_push_choice(&b, &choice_frame, pw.c.SPA_CHOICE_Enum, 0));
-                // We only support one format
                 check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_UNKNOWN));
                 for (formats) |format| {
                     check(pw.c.spa_pod_builder_id(&b, format));
@@ -226,7 +295,7 @@ pub fn main() !void {
                 check(pw.c.spa_pod_builder_push_choice(&b, &choice_frame, pw.c.SPA_CHOICE_Range, 0));
                 check(pw.c.spa_pod_builder_rectangle(&b, 1920 / texel_width, 1080 / texel_width));
                 check(pw.c.spa_pod_builder_rectangle(&b, 1, 1));
-                check(pw.c.spa_pod_builder_rectangle(&b, 1920 / texel_width, 1080 / texel_width));
+                check(pw.c.spa_pod_builder_rectangle(&b, 999999, 999999));
                 assert(pw.c.spa_pod_builder_pop(&b, &choice_frame) != null);
             }
 
@@ -236,7 +305,7 @@ pub fn main() !void {
                 check(pw.c.spa_pod_builder_push_choice(&b, &choice_frame, pw.c.SPA_CHOICE_Range, 0));
                 check(pw.c.spa_pod_builder_fraction(&b, 1000, timer_ms));
                 check(pw.c.spa_pod_builder_fraction(&b, 0, 1));
-                check(pw.c.spa_pod_builder_fraction(&b, 30, 1));
+                check(pw.c.spa_pod_builder_fraction(&b, 120, 1));
                 assert(pw.c.spa_pod_builder_pop(&b, &choice_frame) != null);
             }
 
@@ -349,9 +418,12 @@ fn onStreamStateChanged(
     err: [*c]const u8,
 ) callconv(.c) void {
     _ = old;
-    _ = err;
     _ = userdata;
-    log.info("stream state: \"{s}\"", .{pw.c.pw_stream_state_as_string(state)});
+    if (err != null) {
+        log.err("stream state: \"{s}\" (error={s})", .{ pw.c.pw_stream_state_as_string(state), err });
+    } else {
+        log.info("stream state: \"{s}\"", .{pw.c.pw_stream_state_as_string(state)});
+    }
     switch (state) {
         pw.c.PW_STREAM_STATE_UNCONNECTED => check(pw.c.pw_main_loop_quit(data.loop)),
         // because we started inactive, activate ourselves now
