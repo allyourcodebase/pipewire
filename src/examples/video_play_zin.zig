@@ -98,6 +98,29 @@ const Data = struct {
 
 var data: Data = .{};
 
+const formats: []const pw.c.spa_video_format = &.{
+    // XXX: ... this vs xrgb??
+    pw.c.SPA_VIDEO_FORMAT_RGBx,
+    // XXX: ...
+    pw.c.SPA_VIDEO_FORMAT_BGR,
+    pw.c.SPA_VIDEO_FORMAT_BGR,
+    pw.c.SPA_VIDEO_FORMAT_xBGR,
+    pw.c.SPA_VIDEO_FORMAT_RGB,
+    pw.c.SPA_VIDEO_FORMAT_RGB,
+    pw.c.SPA_VIDEO_FORMAT_xRGB,
+    pw.c.SPA_VIDEO_FORMAT_ABGR,
+    pw.c.SPA_VIDEO_FORMAT_BGRA,
+    pw.c.SPA_VIDEO_FORMAT_ARGB,
+    pw.c.SPA_VIDEO_FORMAT_RGBA,
+    pw.c.SPA_VIDEO_FORMAT_YV12,
+    pw.c.SPA_VIDEO_FORMAT_I420,
+    pw.c.SPA_VIDEO_FORMAT_YUY2,
+    pw.c.SPA_VIDEO_FORMAT_UYVY,
+    pw.c.SPA_VIDEO_FORMAT_YVYU,
+    pw.c.SPA_VIDEO_FORMAT_NV12,
+    pw.c.SPA_VIDEO_FORMAT_NV21,
+};
+
 pub fn main() !void {
     // If we're linking with the Zig module, set up logging.
     var logger = if (example_options.use_zig_module) pw.Logger.init() else {};
@@ -178,6 +201,9 @@ pub fn main() !void {
             check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_mediaSubtype, 0));
             check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_MEDIA_SUBTYPE_raw));
 
+            // XXX: ... oh, we actually need to do all the conversions ourselves? that's really annoying.
+            // there's supposed to be a way to get it to convert for us i think? maybe we need more modules
+            // for video conversion or something. or is it doing it? idk
             // build an enumeration of formats
             {
                 var choice_frame: pw.c.spa_pod_frame = undefined;
@@ -185,11 +211,12 @@ pub fn main() !void {
                 check(pw.c.spa_pod_builder_push_choice(&b, &choice_frame, pw.c.SPA_CHOICE_Enum, 0));
                 // We only support one format
                 check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_UNKNOWN));
-                check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_RGBx));
-                // XXX: ... oh, we actually need to do all the conversions ourselves? that's really annoying.
-                // there's supposed to be a way to get it to convert for us i think? maybe we need more modules
-                // for video conversion or something. or is it doing it? idk
-                check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_YUY2));
+                for (formats) |format| {
+                    check(pw.c.spa_pod_builder_id(&b, format));
+                }
+                // check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_RGBx));
+                // check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_YUY2));
+
                 assert(pw.c.spa_pod_builder_pop(&b, &choice_frame) != null);
             }
 
