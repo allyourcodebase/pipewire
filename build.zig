@@ -134,11 +134,9 @@ pub fn build(b: *std.Build) void {
             .HAVE_GRP_H = {},
             .HAVE_GSTREAMER_DEVICE_PROVIDER = {},
             .HAVE_MALLOC_INFO = {},
-            .HAVE_MALLOC_TRIM = {},
             .HAVE_MEMFD_CREATE = {},
             .HAVE_PIDFD_OPEN = {},
             .HAVE_PWD_H = {},
-            .HAVE_RANDOM_R = {},
             .HAVE_REALLOCARRAY = {},
             .HAVE_SIGABBREV_NP = {},
             .HAVE_SPA_PLUGINS = {},
@@ -162,6 +160,12 @@ pub fn build(b: *std.Build) void {
             .RTPRIO_CLIENT = rtprio_client,
             .RTPRIO_SERVER = rtprio_server,
         });
+        if (target.result.isGnuLibC()) {
+            config_h.addValues(.{
+                .HAVE_MALLOC_TRIM = {},
+                .HAVE_RANDOM_R = {},
+            });
+        }
 
         // Build the library plugins and modules
         {
@@ -302,12 +306,12 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Build the video play example.
+    // Build the video play SDL example.
     {
         const video_play = b.addExecutable(.{
-            .name = "video-play",
+            .name = "video-play-sdl",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("src/examples/video_play.zig"),
+                .root_source_file = b.path("src/examples/video_play_sdl.zig"),
                 .target = target,
                 .optimize = optimize,
             }),
@@ -330,7 +334,49 @@ pub fn build(b: *std.Build) void {
         video_play.linkLibrary(sdl.artifact("SDL3"));
         b.installArtifact(video_play);
 
-        const run_step = b.step("video-play", "Run the video-play example");
+        const run_step = b.step("video-play-sdl", "Run the video-play example");
+
+        const run_cmd = b.addRunArtifact(video_play);
+        run_step.dependOn(&run_cmd.step);
+
+        run_cmd.step.dependOn(b.getInstallStep());
+
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+    }
+
+    // Build the video play ZIN example.
+    {
+        const zin = b.dependency("zin", .{
+            .optimize = optimize,
+            .target = target,
+        }).module("zin");
+
+        const video_play = b.addExecutable(.{
+            .name = "video-play-zin",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/examples/video_play_zin.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "zin", .module = zin },
+                },
+            }),
+        });
+
+        if (use_zig_module) {
+            video_play.root_module.addImport("pipewire", libpipewire_zig);
+        } else {
+            video_play.linkLibrary(libpipewire);
+            video_play.root_module.addImport("pipewire", c);
+        }
+
+        video_play.root_module.addOptions("example_options", example_options);
+
+        b.installArtifact(video_play);
+
+        const run_step = b.step("video-play-zin", "Run the video-play example");
 
         const run_cmd = b.addRunArtifact(video_play);
         run_step.dependOn(&run_cmd.step);
@@ -382,11 +428,6 @@ const flags: []const []const u8 = &.{
     // we just wrap the aliases as well.
     "-D__open_2=__wrap_open_2",
     "-D__open_alias=__wrap___open_alias",
-
-    // Since `spa_autoclose` points to a function defined in a header, its close doesn't get
-    // wrapped. Wrap it manually.
-    "-Dspa_autoclose=__attribute__((__cleanup__(__wrap_close)))",
-    "-Dspa_autoclose=__attribute__((__cleanup__(__wrap_close)))",
 };
 
 pub const PluginAndModuleCtx = struct {
