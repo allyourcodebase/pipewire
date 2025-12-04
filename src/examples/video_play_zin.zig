@@ -58,15 +58,7 @@ pub const panic = zin.panic(.{ .title = "Hello Panic!" });
 
 // XXX: ...
 const global = struct {
-    var class_extra: ?zin.WindowClass = null;
     var last_animation: ?std.time.Instant = null;
-    var text_position: f32 = 0;
-    var mouse_position: ?zin.XY = null;
-    var mouse_down: zin.MouseButtonsDown = .{
-        .left = false,
-        .right = false,
-        .middle = false,
-    };
 };
 
 const timer_ms = 33;
@@ -93,7 +85,7 @@ const Data = struct {
     rect: FRect = .{},
     is_yuv: bool = false,
 
-    draw: ?*const zin.Draw(.{ .static = .main }) = null,
+    current_buffer: ?*pw.c.pw_buffer = null,
 };
 
 var data: Data = .{};
@@ -375,13 +367,15 @@ pub fn main() !void {
 
     try zin.staticWindow(.main).create(.{
         .title = "Video Play",
-        .size = .{ .client_points = .{ .x = 1920, .y = 1080 } },
+        .size = .{ .client_points = .{ .x = 300, .y = 300 } },
         .pos = null,
     });
     defer zin.staticWindow(.main).destroy();
     zin.staticWindow(.main).show();
-    zin.staticWindow(.main).startTimer({}, timer_ms);
 
+    // TODO: calcualte the timer based on the framerate
+    zin.staticWindow(.main).startTimerNanos({}, std.time.ns_per_ms * 16);
+    callback(.{ .timer = {} });
     try zin.mainLoop();
 }
 
@@ -390,9 +384,6 @@ fn callback(cb: zin.Callback(.{ .static = .main })) void {
         .close => zin.quitMainLoop(),
         .window_size => {},
         .draw => |d| {
-            data.draw = &d;
-            defer data.draw = null;
-
             // Early out if we're redrawing too fast (e.g. during a resize)
             {
                 const now = std.time.Instant.now() catch @panic("?");
@@ -401,13 +392,25 @@ fn callback(cb: zin.Callback(.{ .static = .main })) void {
                 if (elapsed_ns / std.time.ns_per_ms < timer_ms / 2) return;
             }
 
-            // XXX: zin update on refresh rate?
-            // XXX: should be main loop?
-            // Try to render a frame with Pipewire.
-            if (pw.c.pw_loop_iterate(pw.c.pw_main_loop_get_loop(data.loop), 0) < 0) return;
+            render(d);
         },
-        .timer => zin.staticWindow(.main).invalidate(),
+        .timer => {
+            pipewireFlush();
+            zin.staticWindow(.main).invalidate();
+        },
         else => {},
+    }
+}
+
+fn pipewireFlush() void {
+    while (true) {
+        const result = pw.c.pw_loop_iterate(pw.c.pw_main_loop_get_loop(data.loop), 0);
+        if (result == 0) break;
+        if (result < 0) {
+            std.log.err("pipewire error {}", .{result});
+            zin.quitMainLoop();
+            break;
+        }
     }
 }
 
@@ -658,26 +661,35 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
     _ = userdata;
     const stream = data.stream;
 
-    // var render_cursor = false;
-
     var maybe_buffer: ?*pw.c.pw_buffer = null;
     while (true) {
         const t = pw.c.pw_stream_dequeue_buffer(stream) orelse break;
         if (maybe_buffer) |b| check(pw.c.pw_stream_queue_buffer(stream, b));
         maybe_buffer = t;
     }
-    const b = maybe_buffer orelse {
-        log.warn("out of buffers", .{});
-        return;
-    };
-    defer check(pw.c.pw_stream_queue_buffer(stream, b));
+    if (maybe_buffer) |b| {
+        if (data.current_buffer) |current| {
+            check(pw.c.pw_stream_queue_buffer(stream, current));
+        }
+        data.current_buffer = b;
+    }
+}
 
-    const buf: *pw.c.spa_buffer = b.buffer;
+fn render(draw: zin.Draw(.{ .static = .main })) void {
+    draw.clear();
+
+    const client_size = zin.staticWindow(.main).getClientSize();
+
+    const buf: *pw.c.spa_buffer = (data.current_buffer orelse {
+        draw.text("waiting for first frame...", 0, @divTrunc(client_size.y, 2), .white);
+        return;
+    }).buffer;
 
     log.debug("new buffer {*}", .{buf});
 
     const sdata = buf.datas[0].data orelse return;
 
+    const stream = data.stream;
     const maybe_h: ?*pw.c.spa_meta_header = @ptrCast(@alignCast(pw.c.spa_buffer_find_meta_data(buf, pw.c.SPA_META_Header, @sizeOf(pw.c.spa_meta_header))));
     if (maybe_h) |h| {
         const now = pw.c.pw_stream_get_nsec(stream);
@@ -701,8 +713,6 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
         const sstride = data.stride;
         const udata: [*]u8 = @ptrCast(sdata); // XXX: ...
         if (buf.n_datas == 1) {
-            const draw = data.draw.?;
-            draw.clear();
             const size = zin.staticWindow(.main).getClientSize();
             const rect_size = zin.scale(i32, texel_width, draw.getDpiScale().x);
             var x: i32, var y: i32 = .{ 0, 0 };
