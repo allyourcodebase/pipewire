@@ -103,9 +103,7 @@ const formats: []const pw.c.spa_video_format = &.{
     pw.c.SPA_VIDEO_FORMAT_RGBx,
     // XXX: ...
     pw.c.SPA_VIDEO_FORMAT_BGR,
-    pw.c.SPA_VIDEO_FORMAT_BGR,
     pw.c.SPA_VIDEO_FORMAT_xBGR,
-    pw.c.SPA_VIDEO_FORMAT_RGB,
     pw.c.SPA_VIDEO_FORMAT_RGB,
     pw.c.SPA_VIDEO_FORMAT_xRGB,
     pw.c.SPA_VIDEO_FORMAT_ABGR,
