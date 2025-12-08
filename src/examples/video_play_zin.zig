@@ -52,12 +52,25 @@ const StaticWindowId = enum {
 
 pub const panic = zin.panic(.{ .title = "Hello Panic!" });
 
-// XXX: ...
 const global = struct {
     const default_timer_period_ns = 16 * std.time.ns_per_ms;
 
     var last_render: ?std.time.Instant = null;
     var timer_period_ns: u64 = 0;
+
+    var loop: ?*pw.c.pw_main_loop = null;
+    var stream: ?*pw.c.pw_stream = null;
+
+    var position: ?*pw.c.spa_io_position = null;
+
+    var format: pw.c.spa_video_info = .{};
+    var stride: i32 = 0;
+    var size: pw.c.spa_rectangle = .{};
+
+    var rect: FRect = .{};
+    var is_yuv: bool = false;
+
+    var current_buffer: ?*pw.c.pw_buffer = null;
 };
 
 const texel_width = 10;
@@ -69,24 +82,6 @@ const FRect = struct {
     w: f32 = 0,
     h: f32 = 0,
 };
-
-const Data = struct {
-    loop: ?*pw.c.pw_main_loop = null,
-    stream: ?*pw.c.pw_stream = null,
-
-    position: ?*pw.c.spa_io_position = null,
-
-    format: pw.c.spa_video_info = .{},
-    stride: i32 = 0,
-    size: pw.c.spa_rectangle = .{},
-
-    rect: FRect = .{},
-    is_yuv: bool = false,
-
-    current_buffer: ?*pw.c.pw_buffer = null,
-};
-
-var data: Data = .{};
 
 const formats: []const pw.c.spa_video_format = &.{
     pw.c.SPA_VIDEO_FORMAT_ENCODED,
@@ -192,8 +187,8 @@ pub fn main() !void {
     defer pw.c.pw_deinit();
 
     // Create the pipewire loop
-    data.loop = pw.c.pw_main_loop_new(null).?;
-    defer pw.c.pw_main_loop_destroy(data.loop);
+    global.loop = pw.c.pw_main_loop_new(null).?;
+    defer pw.c.pw_main_loop_destroy(global.loop);
 
     // Create the pipewire stream
     {
@@ -213,8 +208,8 @@ pub fn main() !void {
             check(pw.c.pw_properties_set(props, pw.c.PW_KEY_TARGET_OBJECT, arg));
         }
 
-        data.stream = pw.c.pw_stream_new_simple(
-            pw.c.pw_main_loop_get_loop(data.loop),
+        global.stream = pw.c.pw_stream_new_simple(
+            pw.c.pw_main_loop_get_loop(global.loop),
             "video-play",
             props,
             &.{
@@ -227,7 +222,7 @@ pub fn main() !void {
             null,
         ).?;
     }
-    defer pw.c.pw_stream_destroy(data.stream);
+    defer pw.c.pw_stream_destroy(global.stream);
 
     // Connect to the stream
     {
@@ -259,21 +254,15 @@ pub fn main() !void {
             check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_mediaSubtype, 0));
             check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_MEDIA_SUBTYPE_raw));
 
-            // XXX: ... oh, we actually need to do all the conversions ourselves? that's really annoying.
-            // there's supposed to be a way to get it to convert for us i think? maybe we need more modules
-            // for video conversion or something. or is it doing it? idk
             // build an enumeration of formats
             {
                 var choice_frame: pw.c.spa_pod_frame = undefined;
                 check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_VIDEO_format, 0));
                 check(pw.c.spa_pod_builder_push_choice(&b, &choice_frame, pw.c.SPA_CHOICE_Enum, 0));
-                check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_UNKNOWN));
+                check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_YUY2));
                 for (formats) |format| {
                     check(pw.c.spa_pod_builder_id(&b, format));
                 }
-                // check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_RGBx));
-                // check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_YUY2));
-
                 assert(pw.c.spa_pod_builder_pop(&b, &choice_frame) != null);
             }
 
@@ -329,7 +318,7 @@ pub fn main() !void {
         // an optional target node to connect to, some flags and parameters
         //
         const res = pw.c.pw_stream_connect(
-            data.stream,
+            global.stream,
             pw.c.PW_DIRECTION_INPUT,
             pw.c.PW_ID_ANY,
             pw.c.PW_STREAM_FLAG_AUTOCONNECT | // try to automatically connect this stream
@@ -391,7 +380,7 @@ fn callback(cb: zin.Callback(.{ .static = .main })) void {
 
 fn pipewireFlush() void {
     while (true) {
-        const result = pw.c.pw_loop_iterate(pw.c.pw_main_loop_get_loop(data.loop), 0);
+        const result = pw.c.pw_loop_iterate(pw.c.pw_main_loop_get_loop(global.loop), 0);
         if (result == 0) break;
         if (result < 0) {
             std.log.err("pipewire error {}", .{result});
@@ -410,7 +399,7 @@ fn onStreamStateChanged(
     _ = old;
     _ = userdata;
 
-    data.current_buffer = null;
+    global.current_buffer = null;
 
     if (err != null) {
         log.err("stream state: \"{s}\" (error={s})", .{ pw.c.pw_stream_state_as_string(state), err });
@@ -419,7 +408,7 @@ fn onStreamStateChanged(
     }
 
     if (state == pw.c.PW_STREAM_STATE_PAUSED) {
-        check(pw.c.pw_stream_set_active(data.stream, true));
+        check(pw.c.pw_stream_set_active(global.stream, true));
     }
 
     if (state != pw.c.PW_STREAM_STATE_STREAMING) {
@@ -431,7 +420,7 @@ fn onStreamIoChanged(userdata: ?*anyopaque, id: u32, area: ?*anyopaque, size: u3
     _ = size;
     _ = userdata;
     if (id == pw.c.SPA_IO_Position) {
-        data.position = @ptrCast(@alignCast(area));
+        global.position = @ptrCast(@alignCast(area));
     }
 }
 
@@ -448,7 +437,7 @@ fn onStreamIoChanged(userdata: ?*anyopaque, id: u32, area: ?*anyopaque, size: u3
 fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const pw.c.spa_pod) callconv(.c) void {
     log.info("stream param changed", .{});
     _ = userdata;
-    const stream = data.stream;
+    const stream = global.stream;
     var params_buffer: [1024]u8 align(@alignOf(u32)) = undefined;
     var b: pw.c.spa_pod_builder = .{
         .data = &params_buffer,
@@ -484,72 +473,67 @@ fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const pw.c.sp
     const hz = denom / num;
     startTimerNanos(@intFromFloat(hz * std.time.ns_per_s));
 
-    if (pw.c.spa_format_parse(param, &data.format.media_type, &data.format.media_subtype) < 0) {
+    if (pw.c.spa_format_parse(param, &global.format.media_type, &global.format.media_subtype) < 0) {
         return;
     }
 
-    if (data.format.media_type != pw.c.SPA_MEDIA_TYPE_video) return;
+    if (global.format.media_type != pw.c.SPA_MEDIA_TYPE_video) return;
 
-    // XXX: do we even need to check the format?
-    const format, const mult: i32 = switch (data.format.media_subtype) {
+    const format, const mult: i32 = switch (global.format.media_subtype) {
         pw.c.SPA_MEDIA_SUBTYPE_raw => b: {
             // call a helper function to parse the format for us.
-            _ = pw.c.spa_format_video_raw_parse(param, &data.format.info.raw);
-            data.size = pw.c.SPA_RECTANGLE(data.format.info.raw.size.width, data.format.info.raw.size.height);
-            break :b .{ data.format.info.raw.format, 1 };
+            _ = pw.c.spa_format_video_raw_parse(param, &global.format.info.raw);
+            global.size = pw.c.SPA_RECTANGLE(global.format.info.raw.size.width, global.format.info.raw.size.height);
+            break :b .{ global.format.info.raw.format, 1 };
         },
         pw.c.SPA_MEDIA_SUBTYPE_dsp => b: {
-            check(pw.c.spa_format_video_dsp_parse(param, &data.format.info.dsp));
-            if (data.format.info.dsp.format != pw.c.SPA_VIDEO_FORMAT_DSP_F32) return;
-            data.size = pw.c.SPA_RECTANGLE(data.position.?.video.size.width, data.position.?.video.size.height);
-            // XXX: is this correct?
+            check(pw.c.spa_format_video_dsp_parse(param, &global.format.info.dsp));
+            if (global.format.info.dsp.format != pw.c.SPA_VIDEO_FORMAT_DSP_F32) return;
+            global.size = pw.c.SPA_RECTANGLE(global.position.?.video.size.width, global.position.?.video.size.height);
             break :b .{ pw.c.SPA_VIDEO_FORMAT_DSP_F32, 4 };
         },
         else => .{ pw.c.SPA_VIDEO_FORMAT_UNKNOWN, 0 },
     };
 
     if (format == pw.c.SPA_VIDEO_FORMAT_UNKNOWN) {
-        check(pw.c.pw_stream_set_error(stream, -pw.c.EINVAL, "unknown pixel format"));
+        _ = pw.c.pw_stream_set_error(stream, -pw.c.EINVAL, "unknown pixel format");
         return;
     }
-    if (data.size.width == 0 or data.size.height == 0) {
-        check(pw.c.pw_stream_set_error(stream, -pw.c.EINVAL, "invalid size"));
+    if (global.size.width == 0 or global.size.height == 0) {
+        _ = pw.c.pw_stream_set_error(stream, -pw.c.EINVAL, "invalid size");
         return;
     }
 
-    // if (data.texture) |texture| data.gpa.free(texture);
-    // data.texture = data.gpa.alloc(u8, data.size.width * data.size.height * 3) catch @panic("OOM");
-    // XXX: don't we always know the format?
     const size: i32, const blocks: i32 = switch (format) {
         pw.c.SPA_VIDEO_FORMAT_YV12, pw.c.SPA_VIDEO_FORMAT_I420 => b: {
-            data.stride = @intCast(data.size.width);
-            data.is_yuv = true;
+            global.stride = @intCast(global.size.width);
+            global.is_yuv = true;
             break :b .{
-                @divExact((data.stride * @as(i32, @intCast(data.size.height))) * 3, 2),
+                @divExact((global.stride * @as(i32, @intCast(global.size.height))) * 3, 2),
                 3,
             };
         },
         pw.c.SPA_VIDEO_FORMAT_YUY2 => b: {
-            data.is_yuv = true;
-            data.stride = @intCast(data.size.width * 2);
+            global.is_yuv = true;
+            global.stride = @intCast(global.size.width * 2);
             break :b .{
-                data.stride * @as(i32, @intCast(data.size.height)),
+                global.stride * @as(i32, @intCast(global.size.height)),
                 1,
             };
         },
         else => b: {
-            data.stride = @intCast(data.size.width * 2);
+            global.stride = @intCast(global.size.width * 2);
             break :b .{
-                data.stride * @as(i32, @intCast(data.size.height)),
+                global.stride * @as(i32, @intCast(global.size.height)),
                 1,
             };
         },
     };
 
-    data.rect.x = 0;
-    data.rect.y = 0;
-    data.rect.w = @floatFromInt(data.size.width);
-    data.rect.h = @floatFromInt(data.size.height);
+    global.rect.x = 0;
+    global.rect.y = 0;
+    global.rect.w = @floatFromInt(global.size.width);
+    global.rect.h = @floatFromInt(global.size.height);
 
     var params_buf: [3]?*const pw.c.spa_pod = undefined;
     var params: std.ArrayList(?*const pw.c.spa_pod) = .initBuffer(&params_buf);
@@ -582,10 +566,10 @@ fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const pw.c.sp
         check(pw.c.spa_pod_builder_int(&b, size * mult));
 
         check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_PARAM_BUFFERS_stride, 0));
-        check(pw.c.spa_pod_builder_int(&b, data.stride * mult));
+        check(pw.c.spa_pod_builder_int(&b, global.stride * mult));
 
         check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_PARAM_BUFFERS_stride, 0));
-        check(pw.c.spa_pod_builder_int(&b, data.stride * mult));
+        check(pw.c.spa_pod_builder_int(&b, global.stride * mult));
 
         {
             var choice_frame: pw.c.spa_pod_frame = undefined;
@@ -605,7 +589,6 @@ fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const pw.c.sp
             assert(pw.c.spa_pod_builder_pop(&b, &choice_frame) != null);
         }
 
-        // XXX: remove sdl example once done since it's pretty out of date at this point, remove from deps too
         params.appendBounded(@ptrCast(@alignCast(pw.c.spa_pod_builder_pop(&b, &param_buffers_frame)))) catch @panic("OOB");
     }
 
@@ -661,7 +644,7 @@ fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const pw.c.sp
 // ```
 fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
     _ = userdata;
-    const stream = data.stream;
+    const stream = global.stream;
 
     var maybe_buffer: ?*pw.c.pw_buffer = null;
     while (true) {
@@ -670,10 +653,10 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
         maybe_buffer = t;
     }
     if (maybe_buffer) |b| {
-        if (data.current_buffer) |current| {
+        if (global.current_buffer) |current| {
             check(pw.c.pw_stream_queue_buffer(stream, current));
         }
-        data.current_buffer = b;
+        global.current_buffer = b;
     }
 }
 
@@ -692,7 +675,7 @@ fn render(draw: zin.Draw(.{ .static = .main })) void {
 
     const client_size = zin.staticWindow(.main).getClientSize();
 
-    const buf: *pw.c.spa_buffer = (data.current_buffer orelse {
+    const buf: *pw.c.spa_buffer = (global.current_buffer orelse {
         draw.text("waiting for webcam...", @divTrunc(client_size.x, 2) - 50, @divTrunc(client_size.y, 2), .white);
         return;
     }).buffer;
@@ -701,7 +684,7 @@ fn render(draw: zin.Draw(.{ .static = .main })) void {
 
     const sdata = buf.datas[0].data orelse return;
 
-    const stream = data.stream;
+    const stream = global.stream;
     const maybe_h: ?*pw.c.spa_meta_header = @ptrCast(@alignCast(pw.c.spa_buffer_find_meta_data(buf, pw.c.SPA_META_Header, @sizeOf(pw.c.spa_meta_header))));
     if (maybe_h) |h| {
         const now = pw.c.pw_stream_get_nsec(stream);
@@ -712,92 +695,47 @@ fn render(draw: zin.Draw(.{ .static = .main })) void {
     const maybe_mc: ?*pw.c.spa_meta_region = @ptrCast(@alignCast(pw.c.spa_buffer_find_meta_data(buf, pw.c.SPA_META_VideoCrop, @sizeOf(pw.c.spa_meta_region))));
     if (maybe_mc) |mc| {
         if (pw.c.spa_meta_region_is_valid(mc)) {
-            data.rect.x = @floatFromInt(mc.region.position.x);
-            data.rect.y = @floatFromInt(mc.region.position.y);
-            data.rect.w = @floatFromInt(mc.region.size.width);
-            data.rect.h = @floatFromInt(mc.region.size.height);
+            global.rect.x = @floatFromInt(mc.region.position.x);
+            global.rect.y = @floatFromInt(mc.region.position.y);
+            global.rect.w = @floatFromInt(mc.region.size.width);
+            global.rect.h = @floatFromInt(mc.region.size.height);
         }
     }
 
     // copy video image in texture
-    if (data.is_yuv) {
-        //     var datas: [4]?[*]u8 = undefined;
-        const sstride = data.stride;
+    if (global.is_yuv and buf.n_datas == 1) {
+        const sstride = global.stride;
         const udata: [*]u8 = @ptrCast(sdata); // XXX: ...
-        if (buf.n_datas == 1) {
-            const size = zin.staticWindow(.main).getClientSize();
-            const rect_size = zin.scale(i32, texel_width, draw.getDpiScale().x);
-            var x: i32, var y: i32 = .{ 0, 0 };
-            // XXX: /2 to avoid reading oob for now
-            while (y < @divTrunc(@min(size.y, data.size.height), 2)) : (y += rect_size) {
-                while (x < @divTrunc(@min(size.x, data.size.width), 2)) : (x += rect_size) {
-                    const i: usize = @intCast((y * sstride + x) * 3);
-                    var color: zin.Rgb8 = .{
-                        .r = udata[i],
-                        .g = udata[i + 1],
-                        .b = udata[i + 2],
-                    };
-                    // XXX: workaround for zin bug where black renders as bright color?
-                    if (std.meta.eql(color, .black)) {
-                        color.r = 1;
-                        color.g = 1;
-                        color.b = 1;
-                    }
-                    draw.rect(.ltwh(x, y, rect_size, rect_size), color);
+        const size = zin.staticWindow(.main).getClientSize();
+        const rect_size = zin.scale(i32, texel_width, draw.getDpiScale().x);
+        var x: i32, var y: i32 = .{ 0, 0 };
+        // XXX: /2 to avoid reading oob for now
+        while (y < @divTrunc(@min(size.y, global.size.height), 2)) : (y += rect_size) {
+            while (x < @divTrunc(@min(size.x, global.size.width), 2)) : (x += rect_size) {
+                const i: usize = @intCast((y * sstride + x) * 3);
+                var color: zin.Rgb8 = .{
+                    .r = udata[i],
+                    .g = udata[i + 1],
+                    .b = udata[i + 2],
+                };
+                // XXX: workaround for zin bug where black renders as bright color?
+                if (std.meta.eql(color, .black)) {
+                    color.r = 1;
+                    color.g = 1;
+                    color.b = 1;
                 }
-                x = 0;
+                draw.rect(.ltwh(x, y, rect_size, rect_size), color);
             }
-        } else {
-            @panic("unimplemented");
-            //         datas[0] = @ptrCast(sdata);
-            //         datas[1] = @ptrCast(buf.datas[1].data);
-            //         datas[2] = @ptrCast(buf.datas[2].data);
-            //         _ = sdl.SDL_UpdateYUVTexture(
-            //             data.texture,
-            //             null,
-            //             datas[0],
-            //             sstride,
-            //             datas[1],
-            //             @divExact(sstride, 2),
-            //             datas[2],
-            //             @divExact(sstride, 2),
-            //         );
+            x = 0;
         }
     } else {
-        log.info("is not yuv", .{});
-        //     var dstride: c_int = undefined;
-        //     var ddata: ?*anyopaque = undefined;
-        //     if (!sdl.SDL_LockTexture(data.texture, null, &ddata, &dstride)) {
-        //         log.err("Couldn't lock texture: {s}", .{sdl.SDL_GetError()});
-        //     }
-        //     defer sdl.SDL_UnlockTexture(data.texture);
-
-        //     var sstride: u32 = @intCast(buf.datas[0].chunk.*.stride);
-        //     if (sstride == 0) sstride = buf.datas[0].chunk.*.size / data.size.height;
-        //     const ostride = @min(sstride, dstride);
-
-        //     var src: [*]u8 = @ptrCast(sdata);
-        //     var dst: [*]u8 = @ptrCast(ddata);
-
-        //     if (data.format.media_subtype == pw.c.SPA_MEDIA_SUBTYPE_dsp) {
-        //         for (0..data.size.height) |_| {
-        //             const pixel: [*]Pixel = @ptrCast(@alignCast(src));
-        //             for (0..data.size.width) |j| {
-        //                 dst[j * 4 + 0] = @intFromFloat(std.math.clamp(pixel[j].r * 255.0, 0, 255));
-        //                 dst[j * 4 + 1] = @intFromFloat(std.math.clamp(pixel[j].g * 255.0, 0, 255));
-        //                 dst[j * 4 + 2] = @intFromFloat(std.math.clamp(pixel[j].b * 255.0, 0, 255));
-        //                 dst[j * 4 + 3] = @intFromFloat(std.math.clamp(pixel[j].a * 255.0, 0, 255));
-        //             }
-        //             src += sstride;
-        //             dst += @intCast(dstride);
-        //         }
-        //     } else {
-        //         for (0..data.size.height) |_| {
-        //             @memcpy(dst[0..@intCast(ostride)], src[0..@intCast(ostride)]);
-        //             src += sstride;
-        //             dst += @intCast(dstride);
-        //         }
-        //     }
+        draw.text(
+            "unsupported format...",
+            @divTrunc(client_size.x, 2) - 50,
+            @divTrunc(client_size.y, 2),
+            .white,
+        );
+        return;
     }
 }
 
