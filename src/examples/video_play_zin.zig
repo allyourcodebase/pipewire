@@ -14,10 +14,6 @@ const Allocator = std.mem.Allocator;
 
 pub const std_options: std.Options = .{
     .log_level = .info,
-    .log_scope_levels = &.{
-        // XXX: these info logs should be changed to debug
-        .{ .scope = .x11, .level = .warn },
-    },
 };
 
 // Normal code wouldn't need this conditional, we're just demonstrating both the static library and
@@ -58,10 +54,12 @@ pub const panic = zin.panic(.{ .title = "Hello Panic!" });
 
 // XXX: ...
 const global = struct {
-    var last_animation: ?std.time.Instant = null;
+    const default_timer_period_ns = 16 * std.time.ns_per_ms;
+
+    var last_render: ?std.time.Instant = null;
+    var timer_period_ns: u64 = 0;
 };
 
-const timer_ms = 33;
 const texel_width = 10;
 const max_buffers = 64;
 
@@ -295,7 +293,7 @@ pub fn main() !void {
                 var choice_frame: pw.c.spa_pod_frame = undefined;
                 check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_VIDEO_framerate, 0));
                 check(pw.c.spa_pod_builder_push_choice(&b, &choice_frame, pw.c.SPA_CHOICE_Range, 0));
-                check(pw.c.spa_pod_builder_fraction(&b, 1000, timer_ms));
+                check(pw.c.spa_pod_builder_fraction(&b, 60, 1));
                 check(pw.c.spa_pod_builder_fraction(&b, 0, 1));
                 check(pw.c.spa_pod_builder_fraction(&b, 120, 1));
                 assert(pw.c.spa_pod_builder_pop(&b, &choice_frame) != null);
@@ -373,8 +371,7 @@ pub fn main() !void {
     defer zin.staticWindow(.main).destroy();
     zin.staticWindow(.main).show();
 
-    // TODO: calcualte the timer based on the framerate
-    zin.staticWindow(.main).startTimerNanos({}, std.time.ns_per_ms * 16);
+    startTimerNanos(global.default_timer_period_ns);
     callback(.{ .timer = {} });
     try zin.mainLoop();
 }
@@ -383,17 +380,7 @@ fn callback(cb: zin.Callback(.{ .static = .main })) void {
     switch (cb) {
         .close => zin.quitMainLoop(),
         .window_size => {},
-        .draw => |d| {
-            // Early out if we're redrawing too fast (e.g. during a resize)
-            {
-                const now = std.time.Instant.now() catch @panic("?");
-                const elapsed_ns = if (global.last_animation) |l| now.since(l) else 0;
-                global.last_animation = now;
-                if (elapsed_ns / std.time.ns_per_ms < timer_ms / 2) return;
-            }
-
-            render(d);
-        },
+        .draw => |d| render(d),
         .timer => {
             pipewireFlush();
             zin.staticWindow(.main).invalidate();
@@ -422,16 +409,21 @@ fn onStreamStateChanged(
 ) callconv(.c) void {
     _ = old;
     _ = userdata;
+
+    data.current_buffer = null;
+
     if (err != null) {
         log.err("stream state: \"{s}\" (error={s})", .{ pw.c.pw_stream_state_as_string(state), err });
     } else {
         log.info("stream state: \"{s}\"", .{pw.c.pw_stream_state_as_string(state)});
     }
-    switch (state) {
-        pw.c.PW_STREAM_STATE_UNCONNECTED => check(pw.c.pw_main_loop_quit(data.loop)),
-        // because we started inactive, activate ourselves now
-        pw.c.PW_STREAM_STATE_PAUSED => check(pw.c.pw_stream_set_active(data.stream, true)),
-        else => {},
+
+    if (state == pw.c.PW_STREAM_STATE_PAUSED) {
+        check(pw.c.pw_stream_set_active(data.stream, true));
+    }
+
+    if (state != pw.c.PW_STREAM_STATE_STREAMING) {
+        startTimerNanos(global.default_timer_period_ns);
     }
 }
 
@@ -454,6 +446,7 @@ fn onStreamIoChanged(userdata: ?*anyopaque, id: u32, area: ?*anyopaque, size: u3
 // will control the buffer memory allocation. This includes the metadata
 // that we would like on our buffer, the size, alignment, etp.
 fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const pw.c.spa_pod) callconv(.c) void {
+    log.info("stream param changed", .{});
     _ = userdata;
     const stream = data.stream;
     var params_buffer: [1024]u8 align(@alignOf(u32)) = undefined;
@@ -481,6 +474,15 @@ fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const pw.c.sp
 
     log.info("got format:", .{});
     check(pw.c.spa_debug_format(2, null, param));
+
+    var parsed: pw.c.spa_video_info_raw = undefined;
+    if (pw.c.spa_format_video_raw_parse(param, &parsed) < 0) {
+        std.debug.panic("failed to parse format", .{});
+    }
+    const num: f32 = @floatFromInt(parsed.framerate.num);
+    const denom: f32 = @floatFromInt(parsed.framerate.denom);
+    const hz = denom / num;
+    startTimerNanos(@intFromFloat(hz * std.time.ns_per_s));
 
     if (pw.c.spa_format_parse(param, &data.format.media_type, &data.format.media_subtype) < 0) {
         return;
@@ -676,12 +678,22 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
 }
 
 fn render(draw: zin.Draw(.{ .static = .main })) void {
+    // Early out if we're redrawing too fast (e.g. during a resize)
+    {
+        const now = std.time.Instant.now() catch |err| @panic(@errorName(err));
+        if (global.last_render) |last_render| {
+            const elapsed_ns = now.since(last_render);
+            if (elapsed_ns < global.timer_period_ns / 2) return;
+        }
+        global.last_render = now;
+    }
+
     draw.clear();
 
     const client_size = zin.staticWindow(.main).getClientSize();
 
     const buf: *pw.c.spa_buffer = (data.current_buffer orelse {
-        draw.text("waiting for first frame...", 0, @divTrunc(client_size.y, 2), .white);
+        draw.text("waiting for webcam...", @divTrunc(client_size.x, 2) - 50, @divTrunc(client_size.y, 2), .white);
         return;
     }).buffer;
 
@@ -793,4 +805,9 @@ fn check(res: c_int) void {
     if (res != 0) {
         std.debug.panic("pipewire call failed: {s}", .{pw.c.spa_strerror(res)});
     }
+}
+
+fn startTimerNanos(ns: u64) void {
+    global.timer_period_ns = ns;
+    zin.staticWindow(.main).startTimerNanos({}, ns);
 }
