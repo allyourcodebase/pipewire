@@ -16,10 +16,6 @@
             .hash = "N-V-__8AAKYw2AD301ZQsWszbYSWZQF5y-q4WXJif0UGRvFh",
         },
         // Used by the examples
-        .sdl = .{
-            .url = "git+https://github.com/allyourcodebase/SDL3#af9c32ce4824e0ad4337447434c40f2b672faf94",
-            .hash = "sdl-0.0.0-i4QD0btgqAABajEXrQnyZr1xVsk7LM48w2nBmuQ5gdfr",
-        },
         .zin = .{
             .url = "git+https://github.com/marler8997/zin#62706713b7089b4220d8e1eb49f8d776138a9058",
             .hash = "zin-0.0.0-W7QDx9BaAwC-H1uS9Cz68oMn9uh5fWuVis5b-eqhCeeq",

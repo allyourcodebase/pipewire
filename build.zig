@@ -306,47 +306,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    // Build the video play SDL example.
-    {
-        const video_play = b.addExecutable(.{
-            .name = "video-play-sdl",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("src/examples/video_play_sdl.zig"),
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-
-        const sdl = b.dependency("sdl", .{
-            .optimize = optimize,
-            .target = target,
-        });
-
-        if (use_zig_module) {
-            video_play.root_module.addImport("pipewire", libpipewire_zig);
-        } else {
-            video_play.linkLibrary(libpipewire);
-            video_play.root_module.addImport("pipewire", c);
-        }
-
-        video_play.root_module.addOptions("example_options", example_options);
-
-        video_play.linkLibrary(sdl.artifact("SDL3"));
-        b.installArtifact(video_play);
-
-        const run_step = b.step("video-play-sdl", "Run the video-play example");
-
-        const run_cmd = b.addRunArtifact(video_play);
-        run_step.dependOn(&run_cmd.step);
-
-        run_cmd.step.dependOn(b.getInstallStep());
-
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
-    }
-
-    // Build the video play ZIN example.
+    // Build the video play example.
     {
         const zin = b.dependency("zin", .{
             .optimize = optimize,
@@ -354,9 +314,9 @@ pub fn build(b: *std.Build) void {
         }).module("zin");
 
         const video_play = b.addExecutable(.{
-            .name = "video-play-zin",
+            .name = "video-play",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("src/examples/video_play_zin.zig"),
+                .root_source_file = b.path("src/examples/video_play.zig"),
                 .target = target,
                 .optimize = optimize,
                 .imports = &.{
@@ -376,7 +336,7 @@ pub fn build(b: *std.Build) void {
 
         b.installArtifact(video_play);
 
-        const run_step = b.step("video-play-zin", "Run the video-play example");
+        const run_step = b.step("video-play", "Run the video-play example");
 
         const run_cmd = b.addRunArtifact(video_play);
         run_step.dependOn(&run_cmd.step);

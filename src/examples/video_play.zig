@@ -53,6 +53,8 @@ const texel_width = 10;
 const max_buffers = 64;
 const default_video_width = 160;
 const default_video_height = 90;
+const default_frame_rate = 60;
+const max_frame_rate = 120;
 
 // Global state used by Zin and Pipewire
 const global = struct {
@@ -182,9 +184,9 @@ pub fn main() !void {
                 var choice_frame: pw.c.spa_pod_frame = undefined;
                 check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_VIDEO_framerate, 0));
                 check(pw.c.spa_pod_builder_push_choice(&b, &choice_frame, pw.c.SPA_CHOICE_Range, 0));
-                check(pw.c.spa_pod_builder_fraction(&b, 60, 1));
+                check(pw.c.spa_pod_builder_fraction(&b, default_frame_rate, 1));
                 check(pw.c.spa_pod_builder_fraction(&b, 0, 1));
-                check(pw.c.spa_pod_builder_fraction(&b, 120, 1));
+                check(pw.c.spa_pod_builder_fraction(&b, max_frame_rate, 1));
                 assert(pw.c.spa_pod_builder_pop(&b, &choice_frame) != null);
             }
 
