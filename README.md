@@ -15,11 +15,15 @@ For more information, see [src/wrap](src/wrap).
 
 This project follows the pristine tarball approach. No modifications are required to the upstream pipewire source.
 
+## Example
+
+You can run the `video-play` example with `zig build video-play` to see the current webcam feed. Use something like `-Dtarget=x86_64-linux-musl` if you want full static linking.
+
+Note that the video will be fairly low resolution as the example doesn't have a real graphics stack and as such is rendering pixels one at a time. This example also only supports the YUV2 video format.
+
 ## Status
 
 Only the pipewire plugins/modules required for the provided example are currently built. To use other parts of the pipewire API, you may need to add more symbols to [src/wrap/dlfcn.zig](src/wrap/dlfcn.zig) and regenerate `c.zig` if additional pipewire headers are required.
-
-You can run the `video-play` example with `zig build video-play` to see the current webcam feed. Use something like `-Dtarget=x86_64-linux-musl` if you want full static linking. Note that the video will be fairly low resolution as the example doesn't have a real graphics stack and as such is rendering pixels one at a time. The example only supports the YUV2 video format.
 
 ## Usage
 
