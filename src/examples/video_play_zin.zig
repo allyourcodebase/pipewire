@@ -75,6 +75,8 @@ const global = struct {
 
 const texel_width = 10;
 const max_buffers = 64;
+const default_video_width = 160;
+const default_video_height = 90;
 
 const FRect = struct {
     x: f32 = 0,
@@ -272,9 +274,9 @@ pub fn main() !void {
                 var choice_frame: pw.c.spa_pod_frame = undefined;
                 check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_VIDEO_size, 0));
                 check(pw.c.spa_pod_builder_push_choice(&b, &choice_frame, pw.c.SPA_CHOICE_Range, 0));
-                check(pw.c.spa_pod_builder_rectangle(&b, 1920 / texel_width, 1080 / texel_width));
+                check(pw.c.spa_pod_builder_rectangle(&b, default_video_width, default_video_height));
                 check(pw.c.spa_pod_builder_rectangle(&b, 1, 1));
-                check(pw.c.spa_pod_builder_rectangle(&b, 999999, 999999));
+                check(pw.c.spa_pod_builder_rectangle(&b, default_video_width, default_video_height));
                 assert(pw.c.spa_pod_builder_pop(&b, &choice_frame) != null);
             }
 
@@ -354,7 +356,10 @@ pub fn main() !void {
 
     try zin.staticWindow(.main).create(.{
         .title = "Video Play",
-        .size = .{ .client_points = .{ .x = 300, .y = 300 } },
+        .size = .{ .client_points = .{
+            .x = default_video_width * texel_width,
+            .y = default_video_height * texel_width,
+        } },
         .pos = null,
     });
     defer zin.staticWindow(.main).destroy();
@@ -705,18 +710,17 @@ fn render(draw: zin.Draw(.{ .static = .main })) void {
     // copy video image in texture
     if (global.is_yuv and buf.n_datas == 1) {
         const sstride = global.stride;
-        const udata: [*]u8 = @ptrCast(sdata); // XXX: ...
+        const udata: [*]u8 = @ptrCast(sdata);
         const size = zin.staticWindow(.main).getClientSize();
         const rect_size = zin.scale(i32, texel_width, draw.getDpiScale().x);
         var x: i32, var y: i32 = .{ 0, 0 };
-        // XXX: /2 to avoid reading oob for now
-        while (y < @divTrunc(@min(size.y, global.size.height), 2)) : (y += rect_size) {
-            while (x < @divTrunc(@min(size.x, global.size.width), 2)) : (x += rect_size) {
-                const i: usize = @intCast((y * sstride + x) * 3);
+        while (y < @min(size.y, global.size.height)) : (y += 1) {
+            while (x < @min(size.x, global.size.width)) : (x += 1) {
+                const i: usize = @intCast(y * sstride + x * 2);
                 var color: zin.Rgb8 = .{
                     .r = udata[i],
-                    .g = udata[i + 1],
-                    .b = udata[i + 2],
+                    .g = udata[i],
+                    .b = udata[i],
                 };
                 // XXX: workaround for zin bug where black renders as bright color?
                 if (std.meta.eql(color, .black)) {
@@ -724,7 +728,7 @@ fn render(draw: zin.Draw(.{ .static = .main })) void {
                     color.g = 1;
                     color.b = 1;
                 }
-                draw.rect(.ltwh(x, y, rect_size, rect_size), color);
+                draw.rect(.ltwh(x * rect_size, y * rect_size, rect_size, rect_size), color);
             }
             x = 0;
         }
