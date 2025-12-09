@@ -713,24 +713,30 @@ fn render(draw: zin.Draw(.{ .static = .main })) void {
         const udata: [*]u8 = @ptrCast(sdata);
         const size = zin.staticWindow(.main).getClientSize();
         const rect_size = zin.scale(i32, texel_width, draw.getDpiScale().x);
-        var x: i32, var y: i32 = .{ 0, 0 };
-        while (y < @min(size.y, global.size.height)) : (y += 1) {
-            while (x < @min(size.x, global.size.width)) : (x += 1) {
-                const i: usize = @intCast(y * sstride + x * 2);
-                var color: zin.Rgb8 = .{
-                    .r = udata[i],
-                    .g = udata[i],
-                    .b = udata[i],
-                };
-                // XXX: workaround for zin bug where black renders as bright color?
-                if (std.meta.eql(color, .black)) {
-                    color.r = 1;
-                    color.g = 1;
-                    color.b = 1;
-                }
-                draw.rect(.ltwh(x * rect_size, y * rect_size, rect_size, rect_size), color);
+        for (0..@intCast(@min(size.y, global.size.height))) |y| {
+            var x: usize = 0;
+            while (x < @min(size.x, global.size.width)) : (x += 2) {
+                const i: usize = @intCast(y * @as(usize, @intCast(sstride)) + x * 2);
+                const colors = yuyvToRgb(udata[i..][0..4].*);
+                draw.rect(
+                    .ltwh(
+                        @as(i32, @intCast(x)) * rect_size,
+                        @as(i32, @intCast(y)) * rect_size,
+                        rect_size,
+                        rect_size,
+                    ),
+                    colors[0],
+                );
+                draw.rect(
+                    .ltwh(
+                        (@as(i32, @intCast(x)) + 1) * rect_size,
+                        @as(i32, @intCast(y)) * rect_size,
+                        rect_size,
+                        rect_size,
+                    ),
+                    colors[1],
+                );
             }
-            x = 0;
         }
     } else {
         draw.text(
@@ -741,6 +747,29 @@ fn render(draw: zin.Draw(.{ .static = .main })) void {
         );
         return;
     }
+}
+
+pub fn clampUnorm(val: anytype) u8 {
+    return @intCast(std.math.clamp(val, 0, 255));
+}
+
+fn yuyvToRgb(yuyv: [4]u8) [2]zin.Rgb8 {
+    const d = @as(i32, yuyv[1]) - 128;
+    const e = @as(i32, yuyv[3]) - 128;
+    const c0 = @as(i32, yuyv[0]) - 16;
+    const c1 = @as(i32, yuyv[2]) - 16;
+    return .{
+        .{
+            .r = clampUnorm(((298 * c0) + (409 * e) + 128) >> 8),
+            .g = clampUnorm(((298 * c0) - (100 * d) - (208 * e) + 128) >> 8),
+            .b = clampUnorm(((298 * c0) + (516 * d) + 128) >> 8),
+        },
+        .{
+            .r = clampUnorm(((298 * c1) + (409 * e) + 128) >> 8),
+            .g = clampUnorm(((298 * c1) - (100 * d) - (208 * e) + 128) >> 8),
+            .b = clampUnorm(((298 * c1) + (516 * d) + 128) >> 8),
+        },
+    };
 }
 
 fn check(res: c_int) void {
