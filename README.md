@@ -23,7 +23,7 @@ Note that the video will be fairly low resolution as the example doesn't have a 
 
 ## Status
 
-Only the pipewire plugins/modules required for the provided example are currently built. To use other parts of the pipewire API, you may need to add more symbols to [src/wrap/dlfcn.zig](src/wrap/dlfcn.zig) and regenerate `c.zig` if additional pipewire headers are required.
+Only the pipewire plugins/modules required for the provided example are currently built. To use other parts of the pipewire API, you may need to add more symbols to the `libs` table in [src/wrap/dlfcn.zig](src/wrap/dlfcn.zig) and regenerate `c.zig` if additional pipewire headers are required.
 
 ## Usage
 
