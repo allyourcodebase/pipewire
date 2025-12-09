@@ -52,10 +52,10 @@ pub fn FmtFlags(T: type) type {
     };
 }
 
-// Forked from std to fix bug, will upstream.
+// https://codeberg.org/ziglang/zig/pulls/30156
 pub fn enumFromInt(comptime E: type, integer: anytype) ?E {
     const enum_info = @typeInfo(E).@"enum";
-    if (comptime !enum_info.is_exhaustive) {
+    if (!enum_info.is_exhaustive) {
         if (std.math.cast(enum_info.tag_type, integer)) |tag| {
             return @enumFromInt(tag);
         }

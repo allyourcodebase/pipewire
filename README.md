@@ -5,7 +5,7 @@ Pipewire client library, statically linked, ported to the Zig build system.
 
 ## Motivation
 
-I want a static executable that can play audio and turn screen contents into a video feed. The pipewire library makes heavy use of `dlopen` internally, so this is nontrivial.
+I want a static executable that can play audio and turn screen contents into a video feed. The pipewire library makes heavy use of `dlopen`  internally, so this is nontrivial.
 
 ## Strategy
 
@@ -17,10 +17,9 @@ This project follows the pristine tarball approach. No modifications are require
 
 ## Status
 
-You can run the `video-play` example with `zig build video-play` to see the current webcam feed. This currently works without pipewire accessing the dynamic linker, but the example executable isn't fully static since it relies on SDL. I plan to port the example away from SDL so that this can be changed.
+Only the pipewire plugins/modules required for the provided example are currently built. To use other parts of the pipewire API, you may need to add more symbols to [src/wrap/dlfcn.zig](src/wrap/dlfcn.zig) and regenerate `c.zig` if additional pipewire headers are required.
 
-Only the pipewire plugins/modules required for this example are currently built. To use other parts of the pipewire API, you may need to add more symbols to [src/wrap/dlfcn.zig](src/wrap/dlfcn.zig) and regenerate `c.zig` if additional pipewire headers are required.
-
+You can run the `video-play` example with `zig build video-play` to see the current webcam feed. Use something like `-Dtarget=x86_64-linux-musl` if you want full static linking. Note that the video will be fairly low resolution as the example doesn't have a real graphics stack and as such is rendering pixels one at a time. The example only supports the YUV2 video format.
 
 ## Usage
 
@@ -54,3 +53,9 @@ defer pw.pw_deinit();
 ```
 
 See [`src/examples`](`src/examples`) for more information.
+
+### Help, I'm getting undefined symbols!
+
+If you import the Pipewire zig module but don't reference it, the import won't get evaluated and the wrapper functions won't get exported.
+
+To resolve this, use something from the pipewire module, or declare `comptime { _ = @import("pipewire"); }` to force evaluation.
