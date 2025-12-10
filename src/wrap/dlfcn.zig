@@ -178,6 +178,22 @@ pub const libs: std.StaticStringMap(Lib) = .initComptime(.{
         },
     },
     .{
+        "pipewire-0.3/plugins/audioconvert/libspa-audioconvert.so",
+        Lib{
+            .name = "libspa-audioconvert",
+            .symbols = .initComptime(.{
+                .{
+                    "spa_handle_factory_enum",
+                    Lib.sym(&plugins.spa_audioconvert__spa_handle_factory_enum),
+                },
+                .{
+                    "spa_log_topic_enum",
+                    Lib.sym(&plugins.spa_audioconvert__spa_log_topic_enum),
+                },
+            }),
+        },
+    },
+    .{
         "pipewire-0.3/modules/libpipewire-module-protocol-native.so",
         Lib{
             .name = "libpipewire-module-protocol-native",
@@ -259,9 +275,11 @@ pub const plugins = struct {
 
     extern const spa_support__spa_handle_factory_enum: SpaHandleFactoryEnum;
     extern const spa_videoconvert__spa_handle_factory_enum: SpaHandleFactoryEnum;
+    extern const spa_audioconvert__spa_handle_factory_enum: SpaHandleFactoryEnum;
 
     extern const spa_support__spa_log_topic_enum: c.spa_log_topic_enum;
     extern const spa_videoconvert__spa_log_topic_enum: c.spa_log_topic_enum;
+    extern const spa_audioconvert__spa_log_topic_enum: c.spa_log_topic_enum;
 };
 
 /// Pipewire module externs. Note that these symbols have been namespaced with the preprocessor, as

@@ -199,6 +199,28 @@ pub fn build(b: *std.Build) void {
                     "videoconvert-dummy.c",
                 },
             });
+            _ = PipewirePlugin.build(b, pm_ctx, .{
+                .name = "audioconvert",
+                .files = &.{
+                    "plugin.c",
+                    "audioadapter.c",
+                    "audioconvert.c",
+                    "biquad.c",
+                    "channelmix-ops-c.c",
+                    "channelmix-ops.c",
+                    "crossover.c",
+                    "peaks-ops-c.c",
+                    "peaks-ops.c",
+                    "resample-peaks.c",
+                    "resample-native-c.c",
+                    "resample-native.c",
+                    "fmt-ops-c.c",
+                    "fmt-ops.c",
+                    "volume-ops-c.c",
+                    "volume-ops.c",
+                    "wavfile.c",
+                },
+            });
 
             _ = PipewireModule.build(b, pm_ctx, .{
                 .name = "adapter",
@@ -347,6 +369,40 @@ pub fn build(b: *std.Build) void {
             run_cmd.addArgs(args);
         }
     }
+
+    // Build the audio src example.
+    {
+        const audio_src = b.addExecutable(.{
+            .name = "audio-src",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/examples/audio_src.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+
+        if (use_zig_module) {
+            audio_src.root_module.addImport("pipewire", libpipewire_zig);
+        } else {
+            audio_src.linkLibrary(libpipewire);
+            audio_src.root_module.addImport("pipewire", c);
+        }
+
+        audio_src.root_module.addOptions("example_options", example_options);
+
+        b.installArtifact(audio_src);
+
+        const run_step = b.step("audio-src", "Run the audio-src example");
+
+        const run_cmd = b.addRunArtifact(audio_src);
+        run_step.dependOn(&run_cmd.step);
+
+        run_cmd.step.dependOn(b.getInstallStep());
+
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+    }
 }
 
 /// Flags uses for all pipewire libraries.
@@ -388,6 +444,8 @@ const flags: []const []const u8 = &.{
     // we just wrap the aliases as well.
     "-D__open_2=__wrap_open_2",
     "-D__open_alias=__wrap___open_alias",
+
+    "-DRESAMPLE_DISABLE_PRECOMP",
 };
 
 pub const PluginAndModuleCtx = struct {
