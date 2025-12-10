@@ -37,18 +37,17 @@ pub export fn __wrap_dlsym(
     noalias handle: ?*anyopaque,
     noalias name: [*:0]u8,
 ) callconv(.c) ?*anyopaque {
-    const lib: *const Lib = @ptrCast(@alignCast(handle.?));
+    const lib: *const Lib = if (handle == c.RTLD_DEFAULT)
+        @panic("unimplemented")
+    else if (handle == c.RTLD_NEXT)
+        &libs.get(Lib.rtld_next_name).?
+    else
+        @ptrCast(@alignCast(handle.?));
     const span = std.mem.span(name);
     var msg: ?[:0]const u8 = null;
-    const symbol = b: {
-        if (handle == c.RTLD_NEXT) {
-            break :b lib.symbols.get(Lib.rtld_next_name).?;
-        }
-        const symbol = lib.symbols.get(span) orelse {
-            msg = "symbol not found";
-            break :b null;
-        };
-        break :b symbol;
+    const symbol = lib.symbols.get(span) orelse b: {
+        msg = "symbol not found";
+        break :b null;
     };
     log.debug("dlsym({f}, \"{f}\") -> 0x{x} ({s})", .{
         lib,
@@ -83,7 +82,7 @@ pub export fn __wrap_dlinfo(
 pub const Lib = struct {
     /// You're allowed to pass null as the path to dlopen, in which case you're supposed to get a
     /// handle to the main program. Pipewire does not appear to use this functionality, so the
-    /// corresponding table under this name.
+    /// corresponding table under this name is empty.
     const main_program_name = "@SELF";
     /// `RTLD_NEXT` is a special handle you can pass to `dlsym` instead of a handle acquired by
     /// `dlopen`. The exact behavior would be difficult to emulate precisely, but in practice
@@ -94,7 +93,7 @@ pub const Lib = struct {
     /// The name of the library, for debug output.
     name: []const u8,
     /// The library's symbols.
-    symbols: std.StaticStringMap(*anyopaque),
+    symbols: std.StaticStringMap(?*anyopaque),
 
     pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try writer.print("@\"{f}\"", .{std.zig.fmtString(self.name)});
@@ -149,7 +148,7 @@ pub const libs: std.StaticStringMap(Lib) = .initComptime(.{
     .{
         "pipewire-0.3/plugins/support/libspa-support.so",
         Lib{
-            .name = "spa-support",
+            .name = "libspa-support",
             .symbols = .initComptime(.{
                 .{
                     "spa_handle_factory_enum",
