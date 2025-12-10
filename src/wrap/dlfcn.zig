@@ -4,9 +4,9 @@
 //! dynamic linker.
 
 const std = @import("std");
-
 const log = std.log.scoped(.wrap_dlfcn);
 const fmtFlags = @import("format.zig").fmtFlags;
+const assert = std.debug.assert;
 
 const c = @cImport({
     @cInclude("spa/support/plugin.h");
@@ -38,6 +38,8 @@ pub export fn __wrap_dlsym(
     noalias name: [*:0]u8,
 ) callconv(.c) ?*anyopaque {
     const lib: *const Lib = if (handle == c.RTLD_DEFAULT)
+        @panic("unimplemented")
+    else if (@hasDecl(c, "RTLD_SELF") and handle == c.RTLD_SELF)
         @panic("unimplemented")
     else if (handle == c.RTLD_NEXT)
         &libs.get(Lib.rtld_next_name).?
@@ -250,6 +252,17 @@ pub const libs: std.StaticStringMap(Lib) = .initComptime(.{
         },
     },
 });
+
+// In practice this will never fail as these constants are defined to values like `0` and `-1` that
+// will never collide with non-null pointers.
+comptime {
+    for (libs.values()) |*lib| {
+        const handle: *const anyopaque = @ptrCast(lib);
+        assert(handle != c.RTLD_DEFAULT);
+        assert(handle != c.RTLD_NEXT);
+        if (@hasDecl(c, "RTLD_SELF")) assert(handle != c.RTLD_SELF);
+    }
+}
 
 /// Pipewire plugin externs. Note that these symbols have been namespaced with the preprocessor, as
 /// the upstream pipewire source usese the same symbol names for these across all plugins which
