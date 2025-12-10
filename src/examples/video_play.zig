@@ -14,7 +14,7 @@ const Allocator = std.mem.Allocator;
 
 // Configure logging
 pub const std_options: std.Options = .{
-    .log_level = .info,
+    .logFn = logFn,
 };
 
 // Normal code wouldn't need this conditional, we're just demonstrating both the static library and
@@ -62,6 +62,8 @@ const max_frame_rate = 120;
 const global = struct {
     const default_timer_period_ns = 16 * std.time.ns_per_ms;
 
+    var runtime_log_level: std.log.Level = .info;
+
     var last_render: ?std.time.Instant = null;
     var timer_period_ns: u64 = 0;
 
@@ -86,6 +88,22 @@ pub fn main() !void {
     if (example_options.use_zig_module) {
         pw.c.pw_log_set(&logger);
         pw.c.pw_log_set_level(pw.Logger.default_level);
+    }
+
+    // Configure our runtime log level
+    const log_level_env_var = "VIDEO_PLAY_LOG_LEVEL";
+    if (std.posix.getenv("VIDEO_PLAY_LOG_LEVEL")) |level_str| {
+        const levels: std.StaticStringMap(std.log.Level) = .initComptime(.{
+            .{ "debug", .debug },
+            .{ "info", .info },
+            .{ "warn", .warn },
+            .{ "err", .err },
+        });
+        if (levels.get(level_str)) |level| {
+            global.runtime_log_level = level;
+        } else {
+            log.err("{s}: unknown level \"{s}\"", .{ log_level_env_var, level_str });
+        }
     }
 
     // Initialize pipewire
@@ -768,3 +786,13 @@ const all_formats: []const pw.c.spa_video_format = &.{
     pw.c.SPA_VIDEO_FORMAT_BGRA_102LE,
     pw.c.SPA_VIDEO_FORMAT_DSP_F32,
 };
+
+pub fn logFn(
+    comptime level: std.log.Level,
+    comptime scope: @TypeOf(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    if (@intFromEnum(level) > @intFromEnum(global.runtime_log_level)) return;
+    std.log.defaultLog(level, scope, format, args);
+}
