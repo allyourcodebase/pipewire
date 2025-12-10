@@ -99,8 +99,13 @@ pub const Lib = struct {
         try writer.print("@\"{f}\"", .{std.zig.fmtString(self.name)});
     }
 
-    fn sym(val: anytype) *anyopaque {
-        return @ptrCast(@constCast(val));
+    fn sym(val: anytype) ?*anyopaque {
+        const result: ?*anyopaque = @ptrCast(@constCast(val));
+        // In practice these constants are defined to be values like `0` and `-1` that won't ever
+        // collide with real pointers.
+        comptime std.debug.assert(result != c.RTLD_NEXT);
+        comptime std.debug.assert(result != c.RTLD_DEFAULT);
+        return result;
     }
 };
 
