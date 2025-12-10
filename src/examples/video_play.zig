@@ -27,6 +27,8 @@ else
         pub const c = @import("pipewire");
     };
 
+const dbg_ctx = pw.Logger.dbgCtx(.info, pw.Logger.scope);
+
 // Configure zin
 pub const zin_config: zin.Config = .{
     .StaticWindowId = enum {
@@ -193,7 +195,7 @@ pub fn main() !void {
             // Log the supported formats
             const format: *pw.c.spa_pod = @ptrCast(@alignCast(pw.c.spa_pod_builder_pop(&b, &format_frame).?));
             log.info("supported formats:", .{});
-            check(pw.c.spa_debug_format(2, null, format));
+            check(pw.c.spa_debugc_format(dbg_ctx, 2, null, format));
 
             // Add the supported formats to our params
             params.appendBounded(format) catch @panic("OOB");
@@ -214,7 +216,7 @@ pub fn main() !void {
             check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_VIDEO_FORMAT_DSP_F32));
 
             const format: *const pw.c.spa_pod = @ptrCast(@alignCast(pw.c.spa_pod_builder_pop(&b, &format_frame)));
-            check(pw.c.spa_debug_format(2, null, format));
+            check(pw.c.spa_debugc_format(dbg_ctx, 2, null, format));
             params.appendBounded(format) catch @panic("OOB");
         }
 
@@ -370,7 +372,7 @@ fn onStreamParamChanged(userdata: ?*anyopaque, id: u32, param: [*c]const pw.c.sp
 
     // Log the new format
     log.info("got format:", .{});
-    check(pw.c.spa_debug_format(2, null, param));
+    check(pw.c.spa_debugc_format(dbg_ctx, 2, null, param));
 
     // Parse the new format and reset our timer to the new interval
     var parsed: pw.c.spa_video_info_raw = undefined;

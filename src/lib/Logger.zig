@@ -38,6 +38,30 @@ pub fn init() c.spa_log {
     };
 }
 
+pub fn dbgCtx(
+    comptime ctx_level: std.log.Level,
+    comptime ctx_scope: @TypeOf(.enum_literal),
+) *c.spa_debug_context {
+    const DebugContext = struct {
+        fn callback(_: ?*c.spa_debug_context, fmt: [*c]const u8, ...) callconv(.c) void {
+            var args = @cVaStart();
+            defer @cVaEnd(&args);
+
+            if (!std.log.logEnabled(ctx_level, ctx_scope)) return;
+            var buf: [1024]u8 = undefined;
+            const formatted = b: {
+                const max_len = c.spa_vscnprintf(&buf, buf.len, fmt, @ptrCast(&args));
+                if (max_len < 0) break :b "(formatting failed)";
+                break :b buf[0..@min(buf.len - 1, @as(usize, @intCast(max_len)))];
+            };
+            std.options.logFn(ctx_level, ctx_scope, "{s}", .{formatted});
+        }
+
+        var instance: c.spa_debug_context = .{ .log = &callback };
+    };
+    return &DebugContext.instance;
+}
+
 const Methods = struct {
     fn log(
         object: ?*anyopaque,
