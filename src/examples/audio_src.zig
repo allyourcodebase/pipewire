@@ -20,8 +20,6 @@ else
         pub const c = @import("pipewire");
     };
 
-const dbg_ctx = pw.Logger.dbgCtx(.info, pw.Logger.scope);
-
 const global = struct {
     const sample_rate = 44100;
     const channel_count = 2;
