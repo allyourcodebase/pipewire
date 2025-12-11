@@ -194,12 +194,13 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
     var frame_count = buf.datas[0].maxsize / stride;
     if (b.requested != 0) frame_count = @min(b.requested, frame_count);
 
-    for (0..frame_count) |frame| {
+    for (0..frame_count) |_| {
         global.accumulator += tau * 440 / global.sample_rate;
         if (global.accumulator >= tau) global.accumulator -= tau;
         const sample = @sin(global.accumulator) * global.volume;
-        for (0..global.channel_count) |channel| {
-            dst[frame * global.channel_count + channel] = sample;
+        for (0..global.channel_count) |_| {
+            dst[0] = sample;
+            dst += 1;
         }
     }
 
