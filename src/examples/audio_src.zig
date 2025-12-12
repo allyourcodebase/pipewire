@@ -20,6 +20,8 @@ else
         pub const c = @import("pipewire");
     };
 
+const dbg_ctx = pw.Logger.dbgCtx(.info, pw.Logger.scope);
+
 const global = struct {
     const sample_rate = 44100;
     const channel_count = 2;
@@ -134,7 +136,7 @@ pub fn main() !void {
     check(pw.c.spa_pod_builder_int(&b, global.channel_count));
 
     const format: *const pw.c.spa_pod = @ptrCast(@alignCast(pw.c.spa_pod_builder_pop(&b, &f)));
-    check(pw.c.spa_debug_format(2, null, format));
+    check(pw.c.spa_debugc_format(dbg_ctx, 2, null, format));
     params[0] = format;
 
     // Now connect this stream. We ask that our process function is
