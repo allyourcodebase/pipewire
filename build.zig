@@ -308,10 +308,7 @@ pub fn build(b: *std.Build) void {
 
     // Build the video play example.
     {
-        const zin = b.dependency("zin", .{
-            .optimize = optimize,
-            .target = target,
-        }).module("zin");
+        const zin = b.dependency("zin", .{}).module("zin");
 
         const video_play = b.addExecutable(.{
             .name = "video-play",
