@@ -199,28 +199,117 @@ pub fn build(b: *std.Build) void {
                     "videoconvert-dummy.c",
                 },
             });
-            _ = PipewirePlugin.build(b, pm_ctx, .{
-                .name = "audioconvert",
-                .files = &.{
-                    "plugin.c",
-                    "audioadapter.c",
-                    "audioconvert.c",
-                    "biquad.c",
-                    "channelmix-ops-c.c",
-                    "channelmix-ops.c",
-                    "crossover.c",
-                    "peaks-ops-c.c",
-                    "peaks-ops.c",
-                    "resample-peaks.c",
-                    "resample-native-c.c",
-                    "resample-native.c",
-                    "fmt-ops-c.c",
-                    "fmt-ops.c",
-                    "volume-ops-c.c",
-                    "volume-ops.c",
-                    "wavfile.c",
-                },
-            });
+
+            {
+                const audioconvert = PipewirePlugin.build(b, pm_ctx, .{
+                    .name = "audioconvert",
+                    .files = &.{
+                        "plugin.c",
+                        "audioadapter.c",
+                        "audioconvert.c",
+                        "biquad.c",
+                        "channelmix-ops-c.c",
+                        "channelmix-ops.c",
+                        "crossover.c",
+                        "peaks-ops-c.c",
+                        "peaks-ops.c",
+                        "resample-peaks.c",
+                        "resample-native-c.c",
+                        "resample-native.c",
+                        "fmt-ops-c.c",
+                        "fmt-ops.c",
+                        "volume-ops-c.c",
+                        "volume-ops.c",
+                        "wavfile.c",
+                    },
+                });
+                if (target.result.cpu.has(.x86, .sse)) {
+                    audioconvert.root_module.addCMacro("HAVE_SSE", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "resample-native-sse.c",
+                            "volume-ops-sse.c",
+                            "peaks-ops-sse.c",
+                            "channelmix-ops-sse.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.x86, .sse2)) {
+                    audioconvert.root_module.addCMacro("HAVE_SSE2", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-sse2.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.x86, .ssse3)) {
+                    audioconvert.root_module.addCMacro("HAVE_SSSE3", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-ssse3.c",
+                            "resample-native-ssse3.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.x86, .sse4_1)) {
+                    audioconvert.root_module.addCMacro("HAVE_SSE41", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-sse41.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.x86, .avx) and target.result.cpu.has(.x86, .fma)) {
+                    // Upstream build system also only defines either if both are present
+                    audioconvert.root_module.addCMacro("HAVE_AVX", "1");
+                    audioconvert.root_module.addCMacro("HAVE_FMA", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "resample-native-avx.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.x86, .avx2)) {
+                    audioconvert.root_module.addCMacro("HAVE_AVX2", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-avx2.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.arm, .neon)) {
+                    audioconvert.root_module.addCMacro("HAVE_NEON", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-neon.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.riscv, .v)) {
+                    audioconvert.root_module.addCMacro("HAVE_RVV", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-rvv.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+            }
 
             _ = PipewireModule.build(b, pm_ctx, .{
                 .name = "adapter",
