@@ -117,30 +117,22 @@ pub fn main() !void {
         pw.c.SPA_TYPE_OBJECT_Format,
         pw.c.SPA_PARAM_EnumFormat,
     ));
-    check(pw.c.spa_pod_builder_add(
-        &b,
-        pw.c.SPA_FORMAT_mediaType,
-        "I",
-        pw.c.SPA_MEDIA_TYPE_audio,
 
-        pw.c.SPA_FORMAT_mediaSubtype,
-        "I",
-        pw.c.SPA_MEDIA_SUBTYPE_raw,
+    check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_mediaType, 0));
+    check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_MEDIA_TYPE_audio));
 
-        pw.c.SPA_FORMAT_AUDIO_format,
-        "I",
-        pw.c.SPA_AUDIO_FORMAT_F32,
+    check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_mediaSubtype, 0));
+    check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_MEDIA_SUBTYPE_raw));
 
-        pw.c.SPA_FORMAT_AUDIO_rate,
-        "i",
-        @as(c_int, global.sample_rate),
+    check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_AUDIO_format, 0));
+    check(pw.c.spa_pod_builder_id(&b, pw.c.SPA_AUDIO_FORMAT_F32));
 
-        pw.c.SPA_FORMAT_AUDIO_channels,
-        "i",
-        @as(c_int, global.channel_count),
+    check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_AUDIO_rate, 0));
+    check(pw.c.spa_pod_builder_int(&b, global.sample_rate));
 
-        @as(c_int, 0),
-    ));
+    check(pw.c.spa_pod_builder_prop(&b, pw.c.SPA_FORMAT_AUDIO_channels, 0));
+    check(pw.c.spa_pod_builder_int(&b, global.channel_count));
+
     const format: *const pw.c.spa_pod = @ptrCast(@alignCast(pw.c.spa_pod_builder_pop(&b, &f)));
     check(pw.c.spa_debug_format(2, null, format));
     params[0] = format;
