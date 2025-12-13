@@ -14,6 +14,17 @@ pub fn build(b: *std.Build) void {
     const rtprio_server = b.option(u8, "rtprio_server", "PipeWire server realtime priority") orelse 88;
     if (rtprio_server < 11 or rtprio_server > 99) @panic("invalid rtprio_server");
 
+    const resampler_precomp_tuples = b.option(
+        []const []const u8,
+        "resampler_precomp_tuples",
+        "Array of \"inrate,outrate[,quality]\" tuples to precompute resampler coefficients for",
+    ) orelse &[_][]const u8{
+        "32000,44100",
+        "32000,48000",
+        "48000,44100",
+        "44100,48000",
+    };
+
     // Get the example specific build options
     const use_zig_module = b.option(
         bool,
@@ -200,6 +211,153 @@ pub fn build(b: *std.Build) void {
                 },
             });
 
+            {
+                // Build the audioconvert plugin
+                const audioconvert = PipewirePlugin.build(b, pm_ctx, .{
+                    .name = "audioconvert",
+                    .files = &.{
+                        "plugin.c",
+                        "audioadapter.c",
+                        "audioconvert.c",
+                        "biquad.c",
+                        "channelmix-ops-c.c",
+                        "channelmix-ops.c",
+                        "crossover.c",
+                        "peaks-ops-c.c",
+                        "peaks-ops.c",
+                        "resample-peaks.c",
+                        "resample-native-c.c",
+                        "resample-native.c",
+                        "fmt-ops-c.c",
+                        "fmt-ops.c",
+                        "volume-ops-c.c",
+                        "volume-ops.c",
+                        "wavfile.c",
+                    },
+                });
+
+                // Configure audioconvert SIMD
+                if (target.result.cpu.has(.x86, .sse)) {
+                    audioconvert.root_module.addCMacro("HAVE_SSE", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "resample-native-sse.c",
+                            "volume-ops-sse.c",
+                            "peaks-ops-sse.c",
+                            "channelmix-ops-sse.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.x86, .sse2)) {
+                    audioconvert.root_module.addCMacro("HAVE_SSE2", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-sse2.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.x86, .ssse3)) {
+                    audioconvert.root_module.addCMacro("HAVE_SSSE3", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-ssse3.c",
+                            "resample-native-ssse3.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                // https://github.com/allyourcodebase/pipewire/issues/10
+                // if (target.result.cpu.has(.x86, .sse4_1)) {
+                //     audioconvert.root_module.addCMacro("HAVE_SSE41", "1");
+                //     audioconvert.root_module.addCSourceFiles(.{
+                //         .root = upstream.path("spa/plugins/audioconvert"),
+                //         .files = &.{
+                //             "fmt-ops-sse41.c",
+                //         },
+                //         .flags = flags,
+                //     });
+                // }
+                if (target.result.cpu.has(.x86, .avx) and target.result.cpu.has(.x86, .fma)) {
+                    // Upstream build system also only defines either if both are present
+                    audioconvert.root_module.addCMacro("HAVE_AVX", "1");
+                    audioconvert.root_module.addCMacro("HAVE_FMA", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "resample-native-avx.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.x86, .avx2)) {
+                    audioconvert.root_module.addCMacro("HAVE_AVX2", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-avx2.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.arm, .neon)) {
+                    audioconvert.root_module.addCMacro("HAVE_NEON", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-neon.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+                if (target.result.cpu.has(.riscv, .v)) {
+                    audioconvert.root_module.addCMacro("HAVE_RVV", "1");
+                    audioconvert.root_module.addCSourceFiles(.{
+                        .root = upstream.path("spa/plugins/audioconvert"),
+                        .files = &.{
+                            "fmt-ops-rvv.c",
+                        },
+                        .flags = flags,
+                    });
+                }
+
+                // Precompute coefficients
+                const dump_coeffs_exe = b.addExecutable(.{
+                    .name = "dump-coeffs",
+                    .root_module = b.createModule(.{
+                        .target = host_target,
+                        .optimize = .ReleaseSafe,
+                        .link_libc = true,
+                    }),
+                });
+                dump_coeffs_exe.addIncludePath(upstream.path("spa/include"));
+                dump_coeffs_exe.addCSourceFiles(.{
+                    .root = upstream.path("spa/plugins/audioconvert"),
+                    .files = &.{
+                        "resample-native.c",
+                        "resample-native-c.c",
+                        "spa-resample-dump-coeffs.c",
+                    },
+                    .flags = flags ++ &[_][]const u8{"-DRESAMPLE_DISABLE_PRECOMP"},
+                });
+
+                const dump_coeffs = b.addRunArtifact(dump_coeffs_exe);
+                for (resampler_precomp_tuples) |tuple| {
+                    dump_coeffs.addArgs(&.{ "-t", tuple });
+                }
+                const resample_native_precomp_h = dump_coeffs.captureStdOut();
+                const write_coeffs = b.addWriteFiles();
+                _ = write_coeffs.addCopyFile(
+                    resample_native_precomp_h,
+                    "resample-native-precomp.h",
+                );
+                audioconvert.addIncludePath(write_coeffs.getDirectory());
+            }
+
             _ = PipewireModule.build(b, pm_ctx, .{
                 .name = "adapter",
                 .files = &.{
@@ -336,6 +494,40 @@ pub fn build(b: *std.Build) void {
         const run_step = b.step("video-play", "Run the video-play example");
 
         const run_cmd = b.addRunArtifact(video_play);
+        run_step.dependOn(&run_cmd.step);
+
+        run_cmd.step.dependOn(b.getInstallStep());
+
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+    }
+
+    // Build the audio src example.
+    {
+        const audio_src = b.addExecutable(.{
+            .name = "audio-src",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/examples/audio_src.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+
+        if (use_zig_module) {
+            audio_src.root_module.addImport("pipewire", libpipewire_zig);
+        } else {
+            audio_src.linkLibrary(libpipewire);
+            audio_src.root_module.addImport("pipewire", c);
+        }
+
+        audio_src.root_module.addOptions("example_options", example_options);
+
+        b.installArtifact(audio_src);
+
+        const run_step = b.step("audio-src", "Run the audio-src example");
+
+        const run_cmd = b.addRunArtifact(audio_src);
         run_step.dependOn(&run_cmd.step);
 
         run_cmd.step.dependOn(b.getInstallStep());
