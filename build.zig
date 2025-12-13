@@ -14,6 +14,17 @@ pub fn build(b: *std.Build) void {
     const rtprio_server = b.option(u8, "rtprio_server", "PipeWire server realtime priority") orelse 88;
     if (rtprio_server < 11 or rtprio_server > 99) @panic("invalid rtprio_server");
 
+    const resampler_precomp_tuples = b.option(
+        []const []const u8,
+        "resampler_precomp_tuples",
+        "Array of \"inrate,outrate[,quality]\" tuples to precompute resampler coefficients for",
+    ) orelse &[_][]const u8{
+        "32000,44100",
+        "32000,48000",
+        "48000,44100",
+        "44100,48000",
+    };
+
     // Get the example specific build options
     const use_zig_module = b.option(
         bool,
@@ -201,6 +212,7 @@ pub fn build(b: *std.Build) void {
             });
 
             {
+                // Build the audioconvert plugin
                 const audioconvert = PipewirePlugin.build(b, pm_ctx, .{
                     .name = "audioconvert",
                     .files = &.{
@@ -223,6 +235,8 @@ pub fn build(b: *std.Build) void {
                         "wavfile.c",
                     },
                 });
+
+                // Configure audioconvert SIMD
                 if (target.result.cpu.has(.x86, .sse)) {
                     audioconvert.root_module.addCMacro("HAVE_SSE", "1");
                     audioconvert.root_module.addCSourceFiles(.{
@@ -310,6 +324,38 @@ pub fn build(b: *std.Build) void {
                         .flags = flags,
                     });
                 }
+
+                // Precompute coefficients
+                const dump_coeffs_exe = b.addExecutable(.{
+                    .name = "dump-coeffs",
+                    .root_module = b.createModule(.{
+                        .target = host_target,
+                        .optimize = .ReleaseSafe,
+                        .link_libc = true,
+                    }),
+                });
+                dump_coeffs_exe.addIncludePath(upstream.path("spa/include"));
+                dump_coeffs_exe.addCSourceFiles(.{
+                    .root = upstream.path("spa/plugins/audioconvert"),
+                    .files = &.{
+                        "resample-native.c",
+                        "resample-native-c.c",
+                        "spa-resample-dump-coeffs.c",
+                    },
+                    .flags = flags ++ &[_][]const u8{"-DRESAMPLE_DISABLE_PRECOMP"},
+                });
+
+                const dump_coeffs = b.addRunArtifact(dump_coeffs_exe);
+                for (resampler_precomp_tuples) |tuple| {
+                    dump_coeffs.addArgs(&.{ "-t", tuple });
+                }
+                const resample_native_precomp_h = dump_coeffs.captureStdOut();
+                const write_coeffs = b.addWriteFiles();
+                _ = write_coeffs.addCopyFile(
+                    resample_native_precomp_h,
+                    "resample-native-precomp.h",
+                );
+                audioconvert.addIncludePath(write_coeffs.getDirectory());
             }
 
             _ = PipewireModule.build(b, pm_ctx, .{
@@ -534,8 +580,6 @@ const flags: []const []const u8 = &.{
     // we just wrap the aliases as well.
     "-D__open_2=__wrap_open_2",
     "-D__open_alias=__wrap___open_alias",
-
-    "-DRESAMPLE_DISABLE_PRECOMP",
 };
 
 pub const PluginAndModuleCtx = struct {
