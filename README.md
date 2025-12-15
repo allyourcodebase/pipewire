@@ -17,7 +17,7 @@ This project follows the pristine tarball approach. No modifications are require
 
 ## Examples
 
-You can run `zig build audio-play` to play a sine wave, and `zig build video-play` to see the current webcam feed. Use something like `-Dtarget=x86_64-linux-musl` if you want full static linking.
+You can run `zig build audio-src` to play a sine wave, and `zig build video-play` to see the current webcam feed. Use something like `-Dtarget=x86_64-linux-musl` if you want full static linking.
 
 Note that the video feed will be fairly low resolution as the example doesn't have a real graphics stack and as such is rendering pixels one at a time. It also only supports the YUV2 video format.
 
