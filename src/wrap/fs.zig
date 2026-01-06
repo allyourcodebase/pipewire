@@ -63,37 +63,49 @@ pub export fn __wrap_access(path_c: [*:0]const u8, mode: c_int) callconv(.c) c_i
     return result;
 }
 
-/// If we're calling open on a config file, fake the result.
-pub export fn __wrap_open(path_c: [*:0]const u8, flags: std.c.O, ...) callconv(.c) std.c.fd_t {
+/// If we're calling open on a config file, fake the result. Called by `va.c`.
+pub export fn __nova_wrap_open(
+    path_c: [*:0]const u8,
+    flags: std.c.O,
+    mode: std.c.mode_t,
+) callconv(.c) std.c.fd_t {
     const path = std.mem.span(path_c);
-    var args = @cVaStart();
-    defer @cVaEnd(&args);
-
     const result, const strategy = b: {
         if (std.meta.eql(flags, .{ .CLOEXEC = true, .ACCMODE = .RDONLY }) and
             std.mem.eql(u8, path, client_config_path))
         {
             if (maybe_client_config_fd != null) @panic("client_config_path already open");
-            const fd = std.c.open("/dev/null", flags, args);
+            const fd = std.c.open("/dev/null", flags, mode);
             maybe_client_config_fd = fd;
             break :b .{ fd, "faked" };
         } else {
-            break :b .{ std.c.open(path_c, flags, args), "real" };
+            break :b .{
+                std.c.open(
+                    path_c,
+                    flags,
+                    mode,
+                ),
+                "real",
+            };
         }
     };
-    log.debug("open(\"{f}\", {f}, ...) -> {} ({s})", .{
+    log.debug("open(\"{f}\", {f}, {}) -> {} ({s})", .{
         std.zig.fmtString(path),
         fmtFlags(flags),
+        mode,
         result,
         strategy,
     });
     return result;
 }
 
+/// From `va.c`.
+pub extern fn __wrap_open(path_c: [*:0]const u8, flags: std.c.O, ...) callconv(.c) std.c.fd_t;
+
 /// glibc aliases open to check the variadic args.
-pub export const __wrap_open_2 = __wrap_open;
+pub const __wrap_open_2 = __wrap_open;
 /// glibc aliases open to check the variadic args.
-pub export const __wrap___open_alias = __wrap_open;
+pub const __wrap___open_alias = __wrap_open;
 
 /// If we're closing a config file, reset `maybe_client_config_fd`.
 pub export fn __wrap_close(fd: std.c.fd_t) callconv(.c) c_int {

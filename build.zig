@@ -49,7 +49,14 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
         }),
     });
+
     {
+        // Add the varargs workaround
+        libpipewire.addCSourceFile(.{
+            .file = b.path("src/wrap/va.c"),
+            .flags = va_flags,
+        });
+
         // Add the source files
         libpipewire.addCSourceFiles(.{
             .root = upstream.path("src/pipewire"),
@@ -464,6 +471,13 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // Add the varargs workaround
+    libpipewire_zig.addCSourceFile(.{
+        .file = b.path("src/lib/va.c"),
+        .flags = va_flags,
+    });
+    libpipewire_zig.addIncludePath(upstream.path("spa/include"));
+
     // Build the video play example.
     {
         const zin = b.dependency("zin", .{}).module("zin");
@@ -537,6 +551,16 @@ pub fn build(b: *std.Build) void {
         }
     }
 }
+
+/// Flags used for the vararg wrapper.
+const va_flags: []const []const u8 = &.{
+    "-fvisibility=hidden",
+    "-fno-strict-aliasing",
+    "-Wno-missing-field-initializers",
+    "-Wno-unused-parameter",
+    "-Wno-pedantic",
+    "-D_GNU_SOURCE",
+};
 
 /// Flags uses for all pipewire libraries.
 const flags: []const []const u8 = &.{

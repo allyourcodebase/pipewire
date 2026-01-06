@@ -13,4 +13,5 @@ comptime {
     for (std.meta.declarations(@This())) |decl| {
         _ = &@field(@This(), decl.name);
     }
+    _ = &Logger;
 }

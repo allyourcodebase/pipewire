@@ -136,7 +136,9 @@ pub fn main() !void {
     check(pw.c.spa_pod_builder_int(&b, global.channel_count));
 
     const format: *const pw.c.spa_pod = @ptrCast(@alignCast(pw.c.spa_pod_builder_pop(&b, &f)));
-    check(pw.c.spa_debugc_format(dbg_ctx, 2, null, format));
+    if (example_options.use_zig_module) {
+        check(pw.c.spa_debugc_format(dbg_ctx, 2, null, format));
+    }
     params[0] = format;
 
     // Now connect this stream. We ask that our process function is

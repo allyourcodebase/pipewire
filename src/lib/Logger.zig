@@ -20,16 +20,7 @@ pub fn init() c.spa_log {
             .type = c.SPA_TYPE_INTERFACE_Log,
             .version = c.SPA_VERSION_LOG,
             .cb = .{
-                .funcs = &c.spa_log_methods{
-                    .version = c.SPA_VERSION_LOG_METHODS,
-                    .log = &Methods.log,
-                    .logt = &Methods.logt,
-                    // We have to pointer cast these due to the way the variadic argument list
-                    // is translated.
-                    .logv = @ptrCast(&Methods.logv),
-                    .logtv = @ptrCast(&Methods.logtv),
-                    .topic_init = &Methods.topicInit,
-                },
+                .funcs = va.__log_funcs,
                 // Appears to be unused, likely intended as userdata
                 .data = null,
             },
@@ -38,81 +29,51 @@ pub fn init() c.spa_log {
     };
 }
 
-pub fn dbgCtx(
-    comptime ctx_level: std.log.Level,
-    comptime ctx_scope: @TypeOf(.enum_literal),
-) *c.spa_debug_context {
-    const DebugContext = struct {
-        fn callback(_: ?*c.spa_debug_context, fmt: [*c]const u8, ...) callconv(.c) void {
-            var args = @cVaStart();
-            defer @cVaEnd(&args);
+const DbgCtx = struct {
+    spa: c.spa_debug_context,
+    level: std.log.Level,
+    log: *const fn (msg: []const u8) void,
 
-            if (!std.log.logEnabled(ctx_level, ctx_scope)) return;
-            var buf: [1024]u8 = undefined;
-            const formatted = b: {
-                const max_len = c.spa_vscnprintf(&buf, buf.len, fmt, @ptrCast(&args));
-                if (max_len < 0) break :b "(formatting failed)";
-                break :b buf[0..@min(buf.len - 1, @as(usize, @intCast(max_len)))];
-            };
-            std.options.logFn(ctx_level, ctx_scope, "{s}", .{formatted});
+    /// Converts a PipeWire log level to a Zig log level, or returns `null` if there's no
+    /// equivalent.
+    fn pwLevelToZig(pw_level: c.spa_log_level) ?std.log.Level {
+        return switch (pw_level) {
+            c.SPA_LOG_LEVEL_NONE => return null,
+            c.SPA_LOG_LEVEL_ERROR => .err,
+            c.SPA_LOG_LEVEL_WARN => .warn,
+            c.SPA_LOG_LEVEL_INFO => .info,
+            c.SPA_LOG_LEVEL_DEBUG, c.SPA_LOG_LEVEL_TRACE => .debug,
+            else => .err,
+        };
+    }
+
+    /// Called by `va.c`.
+    export fn __nova_debugc_format(
+        ctx: ?*c.spa_debug_context,
+        msg: [*:0]const u8,
+        len: c_int,
+    ) callconv(.c) void {
+        const data: *const DbgCtx = @fieldParentPtr("spa", ctx.?);
+        data.log(msg[0..@intCast(len)]);
+    }
+
+    /// Returns true if the given log level is enabled.
+    export fn __log_enabled(pw_level: c.spa_log_level) bool {
+        const level = pwLevelToZig(pw_level) orelse return false;
+        switch (level) {
+            inline else => |l| return std.log.logEnabled(l, scope),
         }
-
-        var instance: c.spa_debug_context = .{ .log = &callback };
-    };
-    return &DebugContext.instance;
-}
-
-const Methods = struct {
-    fn log(
-        object: ?*anyopaque,
-        pw_level: c.spa_log_level,
-        file_abs_c: [*c]const u8,
-        line: c_int,
-        func: [*c]const u8,
-        fmt: [*c]const u8,
-        ...,
-    ) callconv(.c) void {
-        var args = @cVaStart();
-        defer @cVaEnd(&args);
-        logtv(object, pw_level, null, file_abs_c, line, func, fmt, &args);
     }
 
-    fn logv(
-        object: ?*anyopaque,
-        pw_level: c.spa_log_level,
-        file_abs_c: [*c]const u8,
-        line: c_int,
-        func: [*c]const u8,
-        fmt: [*c]const u8,
-        args: ?*std.builtin.VaList,
-    ) callconv(.c) void {
-        logtv(object, pw_level, null, file_abs_c, line, func, fmt, args);
-    }
-
-    fn logt(
+    export fn __nova_logtv(
         object: ?*anyopaque,
         pw_level: c.spa_log_level,
         topic: ?*const c.spa_log_topic,
         file_abs_c: [*c]const u8,
         line: c_int,
         func: [*c]const u8,
-        fmt: [*c]const u8,
-        ...,
-    ) callconv(.c) void {
-        var args = @cVaStart();
-        defer @cVaEnd(&args);
-        logtv(object, pw_level, topic, file_abs_c, line, func, fmt, &args);
-    }
-
-    fn logtv(
-        object: ?*anyopaque,
-        pw_level: c.spa_log_level,
-        topic: ?*const c.spa_log_topic,
-        file_abs_c: [*c]const u8,
-        line: c_int,
-        func: [*c]const u8,
-        fmt: [*c]const u8,
-        args: ?*std.builtin.VaList,
+        msg: [*c]const u8,
+        len: c_int,
     ) callconv(.c) void {
         // Object seems to be ignored by default logger. I believe the messages include it in
         // the formatted string when relevant.
@@ -126,14 +87,7 @@ const Methods = struct {
         _ = func;
 
         // Convert to Zig log levels.
-        const level: std.log.Level = switch (pw_level) {
-            c.SPA_LOG_LEVEL_NONE => return,
-            c.SPA_LOG_LEVEL_ERROR => .err,
-            c.SPA_LOG_LEVEL_WARN => .warn,
-            c.SPA_LOG_LEVEL_INFO => .info,
-            c.SPA_LOG_LEVEL_DEBUG, c.SPA_LOG_LEVEL_TRACE => .debug,
-            else => .err,
-        };
+        const level = pwLevelToZig(pw_level) orelse return;
 
         // We don't want to log absolute file paths. That's overly verbose, and exposes more
         // information to logs than is likely intended.
@@ -146,25 +100,57 @@ const Methods = struct {
         // Perform the log. We use an inline else to make the level comptime known.
         switch (level) {
             inline else => |l| {
-                if (!std.log.logEnabled(l, scope)) return;
-                var buf: [1024]u8 = undefined;
-                const formatted = b: {
-                    const max_len = c.spa_vscnprintf(&buf, buf.len, fmt, @ptrCast(args));
-                    if (max_len < 0) break :b "(formatting failed)";
-                    break :b buf[0..@min(buf.len - 1, @as(usize, @intCast(max_len)))];
-                };
                 std.options.logFn(l, scope, "{s}:{}: {s}", .{
                     file,
                     line,
-                    formatted,
+                    msg[0..@intCast(len)],
                 });
             },
         }
     }
-
-    fn topicInit(object: ?*anyopaque, topic: ?*c.spa_log_topic) callconv(.c) void {
-        // Noop in default implementation as well
-        _ = object;
-        _ = topic;
-    }
 };
+
+pub fn dbgCtx(
+    comptime ctx_level: std.log.Level,
+    comptime ctx_scope: @TypeOf(.enum_literal),
+) *c.spa_debug_context {
+    const Intern = struct {
+        /// Log the message to Zig's logger.
+        fn log(msg: []const u8) void {
+            std.options.logFn(ctx_level, ctx_scope, "{s}", .{msg});
+        }
+
+        /// Ignore the message.
+        fn ignore(
+            _: ?*c.spa_debug_context,
+            _: [*c]const u8,
+            ...,
+        ) callconv(.c) void {}
+
+        /// An instance of the logger with the comptime set config.
+        var instance: DbgCtx = .{
+            .spa = .{
+                .log = if (std.log.logEnabled(ctx_level, ctx_scope))
+                    &va.__debugc_format
+                else
+                    &ignore,
+            },
+            .level = ctx_level,
+            .log = &log,
+        };
+    };
+    return &Intern.instance.spa;
+}
+
+/// From `va.c`.
+const va = struct {
+    extern const __log_funcs: ?*anyopaque;
+    extern fn __debugc_format(?*c.spa_debug_context, [*c]const u8, ...) callconv(.c) void;
+};
+
+// Don't optimize out exports
+comptime {
+    _ = &DbgCtx.__nova_debugc_format;
+    _ = &DbgCtx.__nova_logtv;
+    _ = &DbgCtx.__log_enabled;
+}
