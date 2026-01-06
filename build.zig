@@ -49,7 +49,21 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
         }),
     });
+
     {
+        // Add the varargs workaround
+        libpipewire.addCSourceFile(.{
+            .file = b.path("src/wrap/va.c"),
+            .flags = &.{
+                "-fvisibility=hidden",
+                "-fno-strict-aliasing",
+                "-Wno-missing-field-initializers",
+                "-Wno-unused-parameter",
+                "-Wno-pedantic",
+                "-D_GNU_SOURCE",
+            },
+        });
+
         // Add the source files
         libpipewire.addCSourceFiles(.{
             .root = upstream.path("src/pipewire"),
