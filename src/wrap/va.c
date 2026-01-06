@@ -9,7 +9,8 @@
 #include <spa/debug/context.h>
 #include <spa/support/log.h>
 
-int __nova__wrap_open(const char * path, int flags, mode_t mode);
+// Shims for filesystem access.
+extern int __nova_wrap_open(const char * path, int flags, mode_t mode);
 
 int __wrap_open(const char * path, int flags, ...) {
 	mode_t mode = 0;
@@ -21,17 +22,18 @@ int __wrap_open(const char * path, int flags, ...) {
 		va_end(args);
 	}
 
-	return __nova__wrap_open(path, flags, mode);
+	return __nova_wrap_open(path, flags, mode);
 }
 
 
-void __nova___dbg_ctx__spaCallbackReal(
+// Shims for debug contexts.
+extern void __nova_debugc_format(
     struct spa_debug_context * ctx,
     const char * msg,
     int len
 );
 
-void __dbg_ctx__spaCallbackReal(struct spa_debug_context * ctx, const char * fmt, ...) {
+void __debugc_format(struct spa_debug_context * ctx, const char * fmt, ...) {
 
     const char * msg = "(formatted failed)";
     int msg_len = strlen(msg);
@@ -49,13 +51,14 @@ void __dbg_ctx__spaCallbackReal(struct spa_debug_context * ctx, const char * fmt
 
     va_end(args);
 
-    __nova___dbg_ctx__spaCallbackReal(ctx, msg, msg_len);
+    __nova_debugc_format(ctx, msg, msg_len);
 
 }
 
-void __dbg_ctx__spaCallbackNoop(struct spa_debug_context * ctx, const char * fmt, ...) {}
+// Shims for logging.
+extern bool __log_enabled(enum spa_log_level level);
 
-void __nova__logger__logtv(
+extern void __nova_logtv(
 	void * object,
 	enum spa_log_level level,
 	const struct spa_log_topic * topic,
@@ -65,8 +68,6 @@ void __nova__logger__logtv(
 	const char * msg,
 	int len
 );
-
-bool __logger__enabled(enum spa_log_level level);
 
 static void logtv(
     void * object,
@@ -78,7 +79,7 @@ static void logtv(
     const char * fmt,
     va_list args
 ) {
-	if (!__logger__enabled(level)) return;
+	if (!__log_enabled(level)) return;
 
 	const char * msg = "(formatted failed)";
 	int msg_len = strlen(msg);
@@ -91,7 +92,7 @@ static void logtv(
 	    msg_len = print_len;
 	}
 
-    __nova__logger__logtv(object, level, topic, file_abs, line, func, msg, msg_len);
+    __nova_logtv(object, level, topic, file_abs, line, func, msg, msg_len);
 }
 
 static void log(
@@ -137,17 +138,17 @@ static void logt(
     va_end(args);
 }
 
-static void topicInit(void * object, struct spa_log_topic *topic) {
+static void topic_init(void * object, struct spa_log_topic *topic) {
     // Noop in default implementation as well
 }
 
-static struct spa_log_methods __logger_methods_v = {
+static struct spa_log_methods __log_funcs_real = {
     .version = SPA_VERSION_LOG_METHODS,
     .log = &log,
     .logt = &logt,
     .logv = &logv,
     .logtv = &logtv,
-    .topic_init = &topicInit,
+    .topic_init = &topic_init,
 };
 
-void * __logger_methods = &__logger_methods_v;
+void * __log_funcs = &__log_funcs_real;

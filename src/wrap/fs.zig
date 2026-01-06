@@ -63,18 +63,13 @@ pub export fn __wrap_access(path_c: [*:0]const u8, mode: c_int) callconv(.c) c_i
     return result;
 }
 
-/// If we're calling open on a config file, fake the result. See also `va.c`.
-pub export fn __nova__wrap_open(
+/// If we're calling open on a config file, fake the result. Called by `va.c`.
+pub export fn __nova_wrap_open(
     path_c: [*:0]const u8,
     flags: std.c.O,
     mode: std.c.mode_t,
 ) callconv(.c) std.c.fd_t {
     const path = std.mem.span(path_c);
-    std.log.debug("open(\"{f}\", {f}, {})", .{
-        std.zig.fmtString(path),
-        fmtFlags(flags),
-        mode,
-    });
     const result, const strategy = b: {
         if (std.meta.eql(flags, .{ .CLOEXEC = true, .ACCMODE = .RDONLY }) and
             std.mem.eql(u8, path, client_config_path))
@@ -104,6 +99,7 @@ pub export fn __nova__wrap_open(
     return result;
 }
 
+/// From `va.c`.
 pub extern fn __wrap_open(path_c: [*:0]const u8, flags: std.c.O, ...) callconv(.c) std.c.fd_t;
 
 /// glibc aliases open to check the variadic args.
