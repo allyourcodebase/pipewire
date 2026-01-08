@@ -1,7 +1,4 @@
 //! A logger that forwards pipewire logs to `std.log.`
-//!
-//! May be initialized with `pw_log_set` before initializing pipewire. Don't forget to call
-//! `pw_log_set_level`.
 
 const std = @import("std");
 const c = @import("root.zig").c;
@@ -14,19 +11,34 @@ pub const default_level = switch (std.options.log_level) {
 };
 pub const scope = .pw;
 
-pub fn init() c.spa_log {
-    return .{
-        .iface = .{
-            .type = c.SPA_TYPE_INTERFACE_Log,
-            .version = c.SPA_VERSION_LOG,
-            .cb = .{
-                .funcs = va.__log_funcs,
-                // Appears to be unused, likely intended as userdata
-                .data = null,
-            },
+/// We store this as a singleton to simplify initialization. There's no reason to have more
+/// than one, but we can't quite just store it as a global since it's currently referencing
+/// externs in `va.c` that can't be resolved at comptime when using LLVM.
+var instance: c.spa_log = .{
+    .iface = .{
+        .type = c.SPA_TYPE_INTERFACE_Log,
+        .version = c.SPA_VERSION_LOG,
+        .cb = .{
+            // Initialized by `get` since this value is an extern pointer, which means it's
+            // not copmtime known (unless we're on the x64 backend.)
+            .funcs = null,
+            // Appears to be unused. Likely intended as userdata.
+            .data = null,
         },
-        .level = default_level,
-    };
+    },
+    .level = default_level,
+};
+
+/// Initializes the logger.
+pub fn init() void {
+    c.pw_log_set(get());
+    c.pw_log_set_level(default_level);
+}
+
+/// Gets the logger instance.
+pub fn get() *c.spa_log {
+    if (instance.iface.cb.funcs == null) instance.iface.cb.funcs = va.__log_funcs;
+    return &instance;
 }
 
 const DbgCtx = struct {

@@ -84,11 +84,7 @@ const global = struct {
 
 pub fn main() !void {
     // If we're linking with the Zig module, set up logging.
-    var logger = if (example_options.use_zig_module) pw.Logger.init() else {};
-    if (example_options.use_zig_module) {
-        pw.c.pw_log_set(&logger);
-        pw.c.pw_log_set_level(pw.Logger.default_level);
-    }
+    if (example_options.use_zig_module) pw.Logger.init();
 
     // Configure our runtime log level
     const log_level_env_var = "VIDEO_PLAY_LOG_LEVEL";
