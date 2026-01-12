@@ -191,7 +191,7 @@ pub fn main() !void {
                 check(pw.c.spa_pod_builder_push_choice(&b, &choice_frame, pw.c.SPA_CHOICE_Range, 0));
                 check(pw.c.spa_pod_builder_rectangle(&b, default_video_width, default_video_height));
                 check(pw.c.spa_pod_builder_rectangle(&b, 1, 1));
-                check(pw.c.spa_pod_builder_rectangle(&b, default_video_width, default_video_height));
+                check(pw.c.spa_pod_builder_rectangle(&b, 999999, 999999));
                 assert(pw.c.spa_pod_builder_pop(&b, &choice_frame) != null);
             }
 
