@@ -301,7 +301,6 @@ fn windowEvent(cb: zin.Callback(.{ .static = .main })) void {
         .draw => |d| render(d),
         .timer => {
             pipewireFlush();
-            zin.staticWindow(.main).invalidate();
         },
         else => {},
     }
@@ -329,8 +328,6 @@ fn onStreamStateChanged(
 ) callconv(.c) void {
     _ = old;
     _ = userdata;
-
-    global.current_buffer = null;
 
     if (err != null) {
         log.err("stream state: \"{s}\" (error={s})", .{ pw.c.pw_stream_state_as_string(state), err });
@@ -567,18 +564,17 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
     _ = userdata;
     const stream = global.stream;
 
-    var maybe_buffer: ?*pw.c.pw_buffer = null;
-    while (true) {
-        const t = pw.c.pw_stream_dequeue_buffer(stream) orelse break;
-        if (maybe_buffer) |b| check(pw.c.pw_stream_queue_buffer(stream, b));
-        maybe_buffer = t;
+    // make sure to release the old buffer before getting a new one
+    if (global.current_buffer) |current| {
+        check(pw.c.pw_stream_queue_buffer(stream, current));
+        global.current_buffer = null;
     }
-    if (maybe_buffer) |b| {
-        if (global.current_buffer) |current| {
-            check(pw.c.pw_stream_queue_buffer(stream, current));
-        }
-        global.current_buffer = b;
-    }
+    const new_buffer: *pw.c.pw_buffer = pw.c.pw_stream_dequeue_buffer(stream) orelse {
+        std.log.warn("no buffer?!?", .{});
+        return;
+    };
+    global.current_buffer = new_buffer;
+    zin.staticWindow(.main).invalidate();
 }
 
 /// Render the current buffer.
