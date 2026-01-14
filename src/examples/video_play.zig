@@ -301,6 +301,7 @@ fn windowEvent(cb: zin.Callback(.{ .static = .main })) void {
         .draw => |d| render(d),
         .timer => {
             pipewireFlush();
+            zin.staticWindow(.main).invalidate();
         },
         else => {},
     }
@@ -341,6 +342,7 @@ fn onStreamStateChanged(
 
     if (state != pw.c.PW_STREAM_STATE_STREAMING) {
         startTimerNanos(global.default_timer_period_ns);
+        global.current_buffer = null;
     }
 }
 
@@ -564,17 +566,16 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
     _ = userdata;
     const stream = global.stream;
 
-    // make sure to release the old buffer before getting a new one
+    // Release the old buffer before getting a new one
     if (global.current_buffer) |current| {
         check(pw.c.pw_stream_queue_buffer(stream, current));
         global.current_buffer = null;
     }
     const new_buffer: *pw.c.pw_buffer = pw.c.pw_stream_dequeue_buffer(stream) orelse {
-        std.log.warn("no buffer?!?", .{});
+        std.log.warn("onProcess called with no buffer", .{});
         return;
     };
     global.current_buffer = new_buffer;
-    zin.staticWindow(.main).invalidate();
 }
 
 /// Render the current buffer.
