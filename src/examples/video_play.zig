@@ -138,6 +138,7 @@ pub fn main() !void {
                 .io_changed = &onStreamIoChanged,
                 .param_changed = &onStreamParamChanged,
                 .process = &onProcess,
+                .remove_buffer = &onRemoveBuffer,
             },
             null,
         ).?;
@@ -301,7 +302,6 @@ fn windowEvent(cb: zin.Callback(.{ .static = .main })) void {
         .draw => |d| render(d),
         .timer => {
             pipewireFlush();
-            zin.staticWindow(.main).invalidate();
         },
         else => {},
     }
@@ -329,8 +329,6 @@ fn onStreamStateChanged(
 ) callconv(.c) void {
     _ = old;
     _ = userdata;
-
-    global.current_buffer = null;
 
     if (err != null) {
         log.err("stream state: \"{s}\" (error={s})", .{ pw.c.pw_stream_state_as_string(state), err });
@@ -578,6 +576,15 @@ fn onProcess(userdata: ?*anyopaque) callconv(.c) void {
             check(pw.c.pw_stream_queue_buffer(stream, current));
         }
         global.current_buffer = b;
+        zin.staticWindow(.main).invalidate();
+    }
+}
+
+fn onRemoveBuffer(userdata: ?*anyopaque, buffer: [*c]pw.c.pw_buffer) callconv(.c) void {
+    _ = userdata;
+    if (global.current_buffer == buffer) {
+        global.current_buffer = null;
+        zin.staticWindow(.main).invalidate();
     }
 }
 
