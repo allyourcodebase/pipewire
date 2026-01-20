@@ -291,6 +291,7 @@ pub fn main() !void {
     windowEvent(.{ .timer = {} });
 
     // Start the main loop.
+    zin.staticWindow(.main).invalidate();
     try zin.mainLoop();
 }
 
@@ -300,9 +301,7 @@ fn windowEvent(cb: zin.Callback(.{ .static = .main })) void {
         .close => zin.quitMainLoop(),
         .window_size => {},
         .draw => |d| render(d),
-        .timer => {
-            pipewireFlush();
-        },
+        .timer => pipewireFlush(),
         else => {},
     }
 }
@@ -342,6 +341,7 @@ fn onStreamStateChanged(
 
     if (state != pw.c.PW_STREAM_STATE_STREAMING) {
         startTimerNanos(global.default_timer_period_ns);
+        zin.staticWindow(.main).invalidate();
     }
 }
 
@@ -584,7 +584,6 @@ fn onRemoveBuffer(userdata: ?*anyopaque, buffer: [*c]pw.c.pw_buffer) callconv(.c
     _ = userdata;
     if (global.current_buffer == buffer) {
         global.current_buffer = null;
-        zin.staticWindow(.main).invalidate();
     }
 }
 
