@@ -345,7 +345,7 @@ pub const fops = struct {
         return @ptrFromInt(std.os.linux.mmap(
             addr,
             length,
-            @intCast(prot),
+            @bitCast(prot),
             @bitCast(flags),
             fd,
             offset,

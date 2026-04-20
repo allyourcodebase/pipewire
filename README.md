@@ -23,7 +23,9 @@ Note that the video feed will be fairly low resolution as the example doesn't ha
 
 ## Status
 
-Only the pipewire plugins/modules required for the provided examples are currently built. To use other parts of the pipewire API, you may need to add more symbols to the `libs` table in [src/wrap/dlfcn.zig](src/wrap/dlfcn.zig) and regenerate `c.zig` if additional pipewire headers are required. Contributions welcome!
+Only the pipewire plugins/modules required for the provided examples are currently built. To use other parts of the pipewire API, you may need to add more symbols to the `libs` table in [src/wrap/dlfcn.zig](src/wrap/dlfcn.zig). Contributions welcome!
+
+You can also use `-Duse_translate_c` to automatically translate the new Pipewire headers, see [this issue](https://github.com/allyourcodebase/pipewire/issues/6) for why this isn't yet the default.
 
 ## Usage
 
@@ -57,6 +59,11 @@ defer pw.pw_deinit();
 ```
 
 See [`src/examples`](`src/examples`) for more information.
+
+
+### Help, I'm getting `fatal error: `stdio.h' not found` on nixOS
+
+You can work around this by adding libc to your nix flakes. See [our issue](https://github.com/allyourcodebase/pipewire/issues/6) and the [upstream issue](https://codeberg.org/ziglang/translate-c/issues/317) for more info.
 
 ### Help, I'm getting undefined symbols!
 
