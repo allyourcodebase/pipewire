@@ -52,6 +52,9 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    var version_h: *std.Build.Step.ConfigHeader = undefined;
+    var config_h: *std.Build.Step.ConfigHeader = undefined;
+
     {
         // Add the varargs workaround
         libpipewire.root_module.addCSourceFile(.{
@@ -130,7 +133,7 @@ pub fn build(b: *std.Build) void {
         // Build the library configuration headers
         const pipewire_version = std.SemanticVersion.parse(build_zon.version) catch
             @panic("invalid version");
-        const version_h = b.addConfigHeader(.{
+        version_h = b.addConfigHeader(.{
             .style = .{ .cmake = upstream.path("src/pipewire/version.h.in") },
             .include_path = "pipewire/version.h",
         }, .{
@@ -140,7 +143,7 @@ pub fn build(b: *std.Build) void {
             .PIPEWIRE_API_VERSION = build_zon.api_version,
         });
 
-        const config_h = b.addConfigHeader(.{
+        config_h = b.addConfigHeader(.{
             .style = .blank,
             .include_path = "config.h",
         }, .{
@@ -461,8 +464,11 @@ pub fn build(b: *std.Build) void {
         .func_bodies = false,
         .default_init = true,
     });
-    translator.linkLibrary(libpipewire);
     const c = translator.mod;
+    translator.addIncludePath(upstream.path("spa/include"));
+    translator.addIncludePath(upstream.path("src"));
+    translator.addConfigHeader(version_h);
+    translator.addConfigHeader(config_h);
 
     // Create the zig module. Using this rather than the static library allows for easier
     // integration, and ties logging to the standard library logger.
