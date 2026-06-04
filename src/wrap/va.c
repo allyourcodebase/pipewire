@@ -21,3 +21,7 @@ int __wrap_open(const char * path, int flags, ...) {
 
 	return __nova_wrap_open(path, flags, mode);
 }
+
+int __wrap_open_2(const char * path, int flags) {
+	return __wrap_open(path, flags);
+}
