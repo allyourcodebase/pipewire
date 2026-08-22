@@ -7,7 +7,7 @@ const std = @import("std");
 const log = std.log.scoped(.wrap_dlfcn);
 const fmtFlags = @import("format.zig").fmtFlags;
 const dlfcn = @import("dlfcn.zig");
-const c = @cImport(@cInclude("sys/stat.h"));
+const c = @import("wrap_c");
 
 /// The path pipewire looks for client config at.
 const client_config_path = "pipewire-0.3/confdata/client.conf";

@@ -8,11 +8,7 @@ const log = std.log.scoped(.wrap_dlfcn);
 const fmtFlags = @import("format.zig").fmtFlags;
 const assert = std.debug.assert;
 
-const c = @cImport({
-    @cInclude("spa/support/plugin.h");
-    @cInclude("spa/support/log.h");
-    @cInclude("dlfcn.h");
-});
+const c = @import("wrap_c");
 
 /// The last error.
 var err: ?[*:0]const u8 = null;

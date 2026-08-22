@@ -6,6 +6,8 @@
 #include <stdarg.h>
 #include <spa/support/log.h>
 
+struct spa_debug_context;
+
 // Shims for debug contexts.
 extern void __nova_debugc_format(
     struct spa_debug_context * ctx,

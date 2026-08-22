@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const host_target = b.resolveTargetQuery(.{});
-    const host_optimize = .Debug;
+    const host_optimize: std.builtin.OptimizeMode = .Debug;
 
     const rtprio_client = b.option(u8, "rtprio_client", "PipeWire clients realtime priority") orelse 83;
     if (rtprio_client < 11 or rtprio_client > 99) @panic("invalid rtprio_client");
@@ -455,8 +455,17 @@ pub fn build(b: *std.Build) void {
         b.installArtifact(libpipewire);
     }
 
-    // Create the translated C module for importing pipewire headers into Zig.
     const translate_c = b.dependency("translate_c", .{});
+
+    const wrap_translator: Translator = .init(translate_c, .{
+        .name = "wrap_c",
+        .c_source_file = b.path("src/wrap/wrap_c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    wrap_translator.addIncludePath(upstream.path("spa/include"));
+    libpipewire.root_module.addImport("wrap_c", wrap_translator.mod);
+
     const translator: Translator = .init(translate_c, .{
         .c_source_file = b.path("src/lib/c.h"),
         .target = target,
@@ -558,9 +567,7 @@ pub fn build(b: *std.Build) void {
 
         run_cmd.step.dependOn(b.getInstallStep());
 
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
+        run_cmd.addPassthruArgs();
     }
 }
 
