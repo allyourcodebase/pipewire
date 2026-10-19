@@ -483,6 +483,7 @@ pub fn build(b: *std.Build) void {
     });
     libpipewire_zig.addIncludePath(upstream.path("spa/include"));
 
+    // https://github.com/allyourcodebase/pipewire/issues/22
     // // Build the video play example.
     // {
     //     const zin = b.dependency("zin", .{}).module("zin");

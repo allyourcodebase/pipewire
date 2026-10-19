@@ -1,7 +1,7 @@
 .{
     .name = .pipewire,
     .fingerprint = 0x1c93541a4325abb4,
-    .version = "1.6.3",
+    .version = "2.0.0+1.6.3",
     .api_version = "0.3",
     .minimum_zig_version = "0.16.0",
 
@@ -14,12 +14,6 @@
             .url = "git+https://gitlab.freedesktop.org/pipewire/pipewire.git#1.6.3",
             .hash = "N-V-__8AAEgZ3gDiNoXcVjyqu1oc89Qzq1N9lay3xr4y8rRX",
         },
-        // Used by the examples
-        // .zin = .{
-        //     .url = "git+https://github.com/marler8997/zin#fb3f32abb988ace8aeb5bdc5c3f4cf116e801810",
-        //     .hash = "zin-0.0.0-W7QDx7GEAwCKJgCXWgxmPL1hFtLwOVanaKRTnYBCFTsf",
-        //     .lazy = true,
-        // },
         .translate_c = .{
             .url = "git+https://codeberg.org/ziglang/translate-c#46b5609b5ac4c0a896217d1d984f3ae50e4810b5",
             .hash = "translate_c-0.0.0-Q_BUWpf0BgAwrh5AM-acJcslN_YPEhcoCVKbbNjwuUTJ",
