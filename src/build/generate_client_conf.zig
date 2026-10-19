@@ -38,9 +38,9 @@ pub fn main(init: std.process.Init) !void {
         };
         reader.interface.toss(1);
         const name = try reader.interface.takeSentinel('@');
-        inline for (@typeInfo(options).@"struct".decls) |decl| {
-            if (std.mem.eql(u8, name, decl.name)) {
-                try writer.interface.writeAll(@field(options, decl.name));
+        inline for (comptime std.meta.declarations(options)) |decl_name| {
+            if (std.mem.eql(u8, name, decl_name)) {
+                try writer.interface.writeAll(@field(options, decl_name));
                 break;
             }
         } else std.debug.panic("missing option {s}", .{name});

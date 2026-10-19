@@ -24,25 +24,26 @@ pub fn FmtFlags(T: type) type {
         pub fn format(self: anytype, writer: *std.Io.Writer) std.Io.Writer.Error!void {
             var first = true;
             try writer.writeAll(".{");
-            inline for (@typeInfo(@TypeOf(self.val)).@"struct".fields) |field| {
-                const val = @field(self.val, field.name);
-                switch (@typeInfo(field.type)) {
+            const info = @typeInfo(@TypeOf(self.val)).@"struct";
+            inline for (info.field_names, info.field_types) |field_name, field_type| {
+                const val = @field(self.val, field_name);
+                switch (@typeInfo(field_type)) {
                     .bool => if (val) {
                         try prefix(writer, &first);
-                        try writer.print(".{s} = true", .{field.name});
+                        try writer.print(".{s} = true", .{field_name});
                     },
                     .int => if (val != 0) {
                         try prefix(writer, &first);
-                        try writer.print(".{s} = {x}", .{ field.name, val });
+                        try writer.print(".{s} = {x}", .{ field_name, val });
                     },
                     .@"enum" => {
-                        if (val != std.enums.fromInt(field.type,0)) {
-                            try writer.print(".{s} = {t}", .{ field.name, val });
+                        if (val != std.enums.fromInt(field_type, 0)) {
+                            try writer.print(".{s} = {t}", .{ field_name, val });
                         }
                     },
-                    else => if (!std.meta.eql(val, std.mem.zeroes(field.type))) {
+                    else => if (!std.meta.eql(val, std.mem.zeroes(field_type))) {
                         try prefix(writer, &first);
-                        try writer.print(".{s} = {any}", .{ field.name, val });
+                        try writer.print(".{s} = {any}", .{ field_name, val });
                     },
                 }
             }

@@ -11,7 +11,7 @@ comptime {
     assert(@sizeOf(c_char) == @sizeOf(u8));
 
     // Reference all decls since they include exports.
-    for (std.meta.declarations(@This())) |decl| {
-        _ = &@field(@This(), decl.name);
+    for (std.meta.declarations(@This())) |decl_name| {
+        _ = &@field(@This(), decl_name);
     }
 }

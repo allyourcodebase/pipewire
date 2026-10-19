@@ -1,9 +1,9 @@
 .{
     .name = .pipewire,
     .fingerprint = 0x1c93541a4325abb4,
-    .version = "2.0.0+1.6.3",
+    .version = "3.0.0+1.6.3",
     .api_version = "0.3",
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
 
     .dependencies = .{
         .valgrind_h = .{
@@ -15,8 +15,8 @@
             .hash = "N-V-__8AAEgZ3gDiNoXcVjyqu1oc89Qzq1N9lay3xr4y8rRX",
         },
         .translate_c = .{
-            .url = "git+https://codeberg.org/ziglang/translate-c#46b5609b5ac4c0a896217d1d984f3ae50e4810b5",
-            .hash = "translate_c-0.0.0-Q_BUWpf0BgAwrh5AM-acJcslN_YPEhcoCVKbbNjwuUTJ",
+            .url = "git+https://codeberg.org/ziglang/translate-c?ref=zig-0.17.x#cfac21f3199b2b02ce3fd7db652aa456421fe4ab",
+            .hash = "translate_c-2.0.2-Q_BUWvBNBwDnyehSiuAJmdFcMYHYGA-Jc3KiYdrV2Dqx",
         },
     },
     .paths = .{
