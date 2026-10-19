@@ -1,7 +1,7 @@
 .{
     .name = .pipewire,
     .fingerprint = 0x1c93541a4325abb4,
-    .version = "2.0.0+1.6.3",
+    .version = "3.0.0+1.6.3",
     .api_version = "0.3",
     .minimum_zig_version = "0.17.0",
 
