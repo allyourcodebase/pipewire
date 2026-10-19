@@ -458,12 +458,28 @@ pub fn build(b: *std.Build) void {
 
     const wrap_translator: Translator = .init(translate_c, .{
         .name = "wrap_c",
-        .c_source_file = b.path("src/wrap/wrap_c.h"),
+        .c_source_file = b.path("src/wrap/wrap.c"),
         .target = target,
         .optimize = optimize,
     });
     wrap_translator.addIncludePath(upstream.path("spa/include"));
     libpipewire.root_module.addImport("wrap_c", wrap_translator.mod);
+
+    const lib = b.addLibrary(.{
+        .name = "wrap-c",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+    });
+    lib.root_module.addCSourceFile(.{
+        .file = b.path("src/wrap/wrap.c"),
+        .flags = flags,
+    });
+    lib.root_module.addIncludePath(upstream.path("spa/include"));
+    wrap_translator.mod.linkLibrary(lib);
 
     const translator: Translator = .init(translate_c, .{
         .c_source_file = b.path("src/lib/c.h"),

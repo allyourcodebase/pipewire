@@ -24,19 +24,21 @@ pub export fn __wrap_stat(
     noalias statbuf: *c.struct_stat,
 ) callconv(.c) c_int {
     const pathname = std.mem.span(pathname_c);
-    const result, const strategy = b: {
+    const result, const status, const strategy = b: {
         if (dlfcn.libs.get(pathname) != null) {
-            statbuf.* = std.mem.zeroInit(c.struct_stat, .{ .st_mode = std.c.S.IFREG });
-            break :b .{ 0, "faked" };
+            // statbuf.* = std.mem.zeroInit(Stat, .{ .st_mode = std.c.S.IFREG });
+            c.__wrap_stat_found(statbuf);
+            break :b .{ 0, "found", "faked" };
         } else {
-            break :b .{ c.stat(pathname_c, @ptrCast(statbuf)), "real" };
+            break :b .{ c.stat(pathname_c, @ptrCast(@alignCast(statbuf))), "unknown", "real" };
         }
     };
-    log.debug("stat(\"{f}\", {*}) -> {} (statbuf.* == {f}) ({s})", .{
+    // See `__wrap_fstat_found` for why we print a string for status instead of `fmtFlags` `buf`.
+    log.info("stat(\"{f}\", {*}) -> {} ({s}) ({s})", .{
         std.zig.fmtString(pathname),
         statbuf,
         result,
-        fmtFlags(statbuf.*),
+        status,
         strategy,
     });
     return result;
@@ -100,15 +102,8 @@ pub export fn __nova_wrap_open(
     return result;
 }
 
-/// From `va.c`.
-pub extern fn __wrap_open(path_c: [*:0]const u8, flags: std.c.O, ...) callconv(.c) std.c.fd_t;
-
-/// glibc aliases open to check the variadic args.
-pub const __wrap_open_2 = __wrap_open;
-/// glibc aliases open to check the variadic args.
-pub const __wrap___open_alias = __wrap_open;
-
-/// If we're closing a config file, reset `maybe_client_config_fd`.
+/// If we're closing a config file, reset `maybe_client_config_fd`. See `va.c` for __wrap_open` and
+/// variants.
 pub export fn __wrap_close(fd: std.c.fd_t) callconv(.c) c_int {
     if (maybe_client_config_fd == fd) maybe_client_config_fd = null;
     const result = std.c.close(fd);
@@ -118,20 +113,16 @@ pub export fn __wrap_close(fd: std.c.fd_t) callconv(.c) c_int {
 
 /// If we're fstating a config file, fake the output and result.
 pub export fn __wrap_fstat(fd: std.c.fd_t, buf: *c.struct_stat) callconv(.c) c_int {
-    const result, const strategy = b: {
+    const result, const status, const strategy = b: {
         if (fd == maybe_client_config_fd) {
-            buf.* = std.mem.zeroInit(c.struct_stat, .{
-                .st_mode = std.c.S.IFREG,
-                .st_uid = std.math.maxInt(std.os.linux.uid_t),
-                .st_gid = std.math.maxInt(std.os.linux.gid_t),
-                .st_size = client_conf.len,
-            });
-            break :b .{ 0, "real" };
+            c.__wrap_fstat_found(buf, client_conf.len);
+            break :b .{ 0, "found", "real" };
         } else {
-            break :b .{ c.fstat(fd, buf), "real" };
+            break :b .{ c.fstat(fd, @ptrCast(buf)), "unknown", "real" };
         }
     };
-    log.debug("fstat({}, {*}) -> {} (buf.* = {any}) ({s})", .{ fd, buf, result, buf.*, strategy });
+    // See `__wrap_fstat_found` for why we print a string for status instead of `fmtFlags` `buf`.
+    log.debug("fstat({}, {*}) -> {} {s} ({s})", .{ fd, buf, result, status, strategy });
     return result;
 }
 

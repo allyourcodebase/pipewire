@@ -214,6 +214,6 @@ pub fn logFn(
     comptime format: []const u8,
     args: anytype,
 ) void {
-    if (@intFromEnum(level) > @intFromEnum(global.runtime_log_level)) return;
+    if (@backingInt(level) > @backingInt(global.runtime_log_level)) return;
     std.log.defaultLog(level, scope, format, args);
 }
