@@ -35,13 +35,14 @@ const global = struct {
     var stream: ?*pw.c.pw_stream = null;
 };
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     // If we're linking with the Zig module, set up logging.
     if (example_options.use_zig_module) pw.Logger.init();
 
     // Configure our runtime log level
     const log_level_env_var = "AUDIO_SRC_LOG_LEVEL";
-    if (std.posix.getenv(log_level_env_var)) |level_str| {
+    if (std.c.getenv(log_level_env_var)) |level_str_nt| {
+        const level_str = std.mem.span(level_str_nt);
         const levels: std.StaticStringMap(std.log.Level) = .initComptime(.{
             .{ "debug", .debug },
             .{ "info", .info },
@@ -84,7 +85,7 @@ pub fn main() !void {
     ).?;
 
     // Set stream target if given on command line
-    var args: std.process.ArgIterator = .init();
+    var args = init.minimal.args.iterate();
     _ = args.skip();
     if (args.next()) |arg| check(pw.c.pw_properties_set(props, pw.c.PW_KEY_TARGET_OBJECT, arg));
 

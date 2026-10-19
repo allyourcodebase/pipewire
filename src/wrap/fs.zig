@@ -7,6 +7,7 @@ const std = @import("std");
 const log = std.log.scoped(.wrap_dlfcn);
 const fmtFlags = @import("format.zig").fmtFlags;
 const dlfcn = @import("dlfcn.zig");
+const c = @cImport(@cInclude("sys/stat.h"));
 
 /// The path pipewire looks for client config at.
 const client_config_path = "pipewire-0.3/confdata/client.conf";
@@ -20,15 +21,15 @@ var maybe_client_config_fd: ?std.c.fd_t = null;
 /// If we're stating a shared library from out table, fake the result.
 pub export fn __wrap_stat(
     noalias pathname_c: [*:0]const u8,
-    noalias statbuf: *std.c.Stat,
+    noalias statbuf: *c.struct_stat,
 ) callconv(.c) c_int {
     const pathname = std.mem.span(pathname_c);
     const result, const strategy = b: {
         if (dlfcn.libs.get(pathname) != null) {
-            statbuf.* = std.mem.zeroInit(std.c.Stat, .{ .mode = std.c.S.IFREG });
+            statbuf.* = std.mem.zeroInit(c.struct_stat, .{ .st_mode = std.c.S.IFREG });
             break :b .{ 0, "faked" };
         } else {
-            break :b .{ std.c.stat(pathname_c, statbuf), "real" };
+            break :b .{ c.stat(pathname_c, @ptrCast(statbuf)), "real" };
         }
     };
     log.debug("stat(\"{f}\", {*}) -> {} (statbuf.* == {f}) ({s})", .{
@@ -116,38 +117,29 @@ pub export fn __wrap_close(fd: std.c.fd_t) callconv(.c) c_int {
 }
 
 /// If we're fstating a config file, fake the output and result.
-pub export fn __wrap_fstat(fd: std.c.fd_t, buf: *std.c.Stat) callconv(.c) c_int {
+pub export fn __wrap_fstat(fd: std.c.fd_t, buf: *c.struct_stat) callconv(.c) c_int {
     const result, const strategy = b: {
         if (fd == maybe_client_config_fd) {
-            buf.* = std.mem.zeroInit(std.c.Stat, .{
-                .dev = 0,
-                .ino = 0,
-                .mode = std.c.S.IFREG,
-                .nlink = 0,
-                .uid = std.math.maxInt(std.c.uid_t),
-                .gid = std.math.maxInt(std.c.gid_t),
-                .rdev = 0,
-                .size = client_conf.len,
-                .blksize = 0,
-                .blocks = 0,
-                .atim = std.mem.zeroes(std.c.timespec),
-                .mtim = std.mem.zeroes(std.c.timespec),
-                .ctim = std.mem.zeroes(std.c.timespec),
+            buf.* = std.mem.zeroInit(c.struct_stat, .{
+                .st_mode = std.c.S.IFREG,
+                .st_uid = std.math.maxInt(std.os.linux.uid_t),
+                .st_gid = std.math.maxInt(std.os.linux.gid_t),
+                .st_size = client_conf.len,
             });
             break :b .{ 0, "real" };
         } else {
-            break :b .{ std.c.fstat(fd, buf), "real" };
+            break :b .{ c.fstat(fd, buf), "real" };
         }
     };
-    log.debug("fstat({}, {*}) -> {} (buf.* = ...) ({s})", .{ fd, buf, result, strategy });
+    log.debug("fstat({}, {*}) -> {} (buf.* = {any}) ({s})", .{ fd, buf, result, buf.*, strategy });
     return result;
 }
 
 /// If we're mmaping a config file, fake the output and result.
 pub export fn __wrap_mmap(
-    addr: ?*anyopaque,
+    addr: ?[*]u8,
     length: usize,
-    prot: c_int,
+    prot: std.os.linux.PROT,
     flags: std.c.MAP,
     fd: std.c.fd_t,
     offset: std.c.off_t,
@@ -168,8 +160,8 @@ pub export fn __wrap_mmap(
                     client_conf.len,
                 });
             }
-            if (prot != std.c.PROT.READ) {
-                std.debug.panic("__wrap_mmap: {s}: unexpected prot: {x}", .{
+            if (!prot.READ) {
+                std.debug.panic("__wrap_mmap: {s}: unexpected prot: {}", .{
                     client_config_path,
                     prot,
                 });
@@ -191,7 +183,7 @@ pub export fn __wrap_mmap(
             break :b .{ @ptrCast(@constCast(client_conf.ptr)), "faked" };
         } else {
             break :b .{
-                std.c.mmap(@alignCast(addr), length, @intCast(prot), flags, fd, offset),
+                @ptrFromInt(std.os.linux.mmap(addr, length, prot, flags, fd, offset)),
                 "real",
             };
         }

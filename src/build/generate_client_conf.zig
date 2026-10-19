@@ -6,31 +6,30 @@ const std = @import("std");
 const options = @import("options");
 const assert = std.debug.assert;
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
-    defer if (gpa.deinit() != .ok) @panic("leak detected");
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const gpa = init.arena.allocator();
+    const io = init.io;
 
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    var args = try init.minimal.args.iterateAllocator(gpa);
+    defer args.deinit();
+    _ = args.skip();
+    const input_path = args.next().?;
+    const output_path = args.next().?;
+    assert(args.next() == null);
 
-    const input_path = args[1];
-    const output_path = args[2];
-    assert(args.len == 3);
+    const cwd = std.Io.Dir.cwd();
 
-    const cwd = std.fs.cwd();
-
-    const input = try cwd.openFile(input_path, .{});
-    defer input.close();
+    const input = try cwd.openFile(io, input_path, .{});
+    defer input.close(io);
 
     var input_buf: [4096]u8 = undefined;
-    var reader = input.readerStreaming(&input_buf);
+    var reader = input.readerStreaming(io, &input_buf);
 
-    const output = try cwd.createFile(output_path, .{});
-    defer output.close();
+    const output = try cwd.createFile(io, output_path, .{});
+    defer output.close(io);
 
     var output_buf: [4096]u8 = undefined;
-    var writer = output.writerStreaming(&output_buf);
+    var writer = output.writerStreaming(io, &output_buf);
 
     while (true) {
         _ = reader.interface.streamDelimiter(&writer.interface, '@') catch |err| switch (err) {
@@ -48,5 +47,5 @@ pub fn main() !void {
     }
 
     try writer.interface.flush();
-    try output.sync();
+    try output.sync(io);
 }

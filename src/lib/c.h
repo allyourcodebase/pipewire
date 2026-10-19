@@ -1,0 +1,13 @@
+#include <stdio.h>
+#include <spa/utils/defs.h>
+// https://github.com/allyourcodebase/pipewire/issues/6
+#define SPA_STATIC_ASSERT
+#include "spa/utils/result.h"
+#include "spa/param/video/format-utils.h"
+#include "spa/param/tag-utils.h"
+#include "spa/param/props.h"
+#include "spa/param/latency-utils.h"
+#include "spa/debug/format.h"
+#include "spa/debug/pod.h"
+#include "pipewire/pipewire.h"
+#include "pipewire/extensions/metadata.h"
