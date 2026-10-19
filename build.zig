@@ -52,10 +52,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    var version_h: *std.Build.Step.ConfigHeader = undefined;
-    var config_h: *std.Build.Step.ConfigHeader = undefined;
-
-    {
+    const version_h, const config_h = b: {
         // Add the varargs workaround
         libpipewire.root_module.addCSourceFile(.{
             .file = b.path("src/wrap/va.c"),
@@ -133,7 +130,7 @@ pub fn build(b: *std.Build) void {
         // Build the library configuration headers
         const pipewire_version = std.SemanticVersion.parse(build_zon.version) catch
             @panic("invalid version");
-        version_h = b.addConfigHeader(.{
+        const version_h = b.addConfigHeader(.{
             .style = .{ .cmake = upstream.path("src/pipewire/version.h.in") },
             .include_path = "pipewire/version.h",
         }, .{
@@ -143,7 +140,7 @@ pub fn build(b: *std.Build) void {
             .PIPEWIRE_API_VERSION = build_zon.api_version,
         });
 
-        config_h = b.addConfigHeader(.{
+        const config_h = b.addConfigHeader(.{
             .style = .blank,
             .include_path = "config.h",
         }, .{
@@ -453,7 +450,9 @@ pub fn build(b: *std.Build) void {
 
         // Install the library
         b.installArtifact(libpipewire);
-    }
+
+        break :b .{ version_h, config_h };
+    };
 
     const translate_c = b.dependency("translate_c", .{});
 
