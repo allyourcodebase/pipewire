@@ -7,8 +7,6 @@ pub fn build(b: *std.Build) void {
     // Get the library and example build options
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const host_target = b.resolveTargetQuery(.{});
-    const host_optimize: std.builtin.OptimizeMode = .Debug;
 
     const rtprio_client = b.option(u8, "rtprio_client", "PipeWire clients realtime priority") orelse 83;
     if (rtprio_client < 11 or rtprio_client > 99) @panic("invalid rtprio_client");
@@ -107,8 +105,8 @@ pub fn build(b: *std.Build) void {
                 .name = "generate_client_conf",
                 .root_module = b.createModule(.{
                     .root_source_file = b.path("src/build/generate_client_conf.zig"),
-                    .target = host_target,
-                    .optimize = host_optimize,
+                    .target = b.graph.host,
+                    .optimize = .safe,
                 }),
             });
 
@@ -337,8 +335,8 @@ pub fn build(b: *std.Build) void {
                 const dump_coeffs_exe = b.addExecutable(.{
                     .name = "dump-coeffs",
                     .root_module = b.createModule(.{
-                        .target = host_target,
-                        .optimize = .ReleaseSafe,
+                        .target = b.graph.host,
+                        .optimize = .safe,
                         .link_libc = true,
                     }),
                 });
