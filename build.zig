@@ -57,6 +57,15 @@ pub fn build(b: *std.Build) void {
             .flags = va_flags,
         });
 
+        // Translate C demotes some header-only variadic functions to externs. The SPA headers
+        // define their functions `static inline` unless SPA_API_IMPL is set, so upstream's lib.c
+        // defines every one of them once for those externs to link against. Separate sections let
+        // release links drop the ones nothing calls.
+        libpipewire.root_module.addCSourceFile(.{
+            .file = upstream.path("spa/lib/lib.c"),
+            .flags = flags ++ &[_][]const u8{ "-ffunction-sections", "-fdata-sections" },
+        });
+
         // Add the source files
         libpipewire.root_module.addCSourceFiles(.{
             .root = upstream.path("src/pipewire"),
@@ -604,13 +613,6 @@ const flags: []const []const u8 = &.{
     "-Wno-pedantic",
     "-D_GNU_SOURCE",
     "-DFASTPATH",
-
-    // Translate C can't translate some of the variadic functions API so they get demoted to
-    // externs. However, since they're present only in headers and marked as `SPA_API_IMPL` which
-    // which defaults to `static inline`, the symbols end up being missing. We instead mark them as
-    // weak so that we don't get duplicate symbols, but are still able to reference the C
-    // implementations.
-    "-DSPA_API_IMPL=__attribute__((weak))",
 
     // Wrap the standard library functions we want to replace with our own implementations to avoid
     // relying on a dynamic linker.
